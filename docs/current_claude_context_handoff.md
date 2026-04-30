@@ -1,277 +1,271 @@
 # Claude Context Handoff — Quant Research Platform
 
-**Document path in repo:** `docs/current_claude_context_handoff.md`
-**Last updated:** 2026-04-29
-**Maintainer:** Jeremy
-**Purpose:** Bring a fresh Claude chat session up to date on the project state without making the human re-paste files.
+# Section 3c — Model Layer + MLflow: Handoff Packet
+
+**Section to be drafted:** `docs/engineering_spec/03c_model_layer_mlflow.md`
+**Date issued:** 2026-04-29
+**Approver:** Jeremy
+**Builder:** Claude (fresh chat; new context window)
+**QA Reviewer:** ChatGPT
+
+This packet authorizes Section 3c drafting per Engineering Workflow §2.2 (handoff packet) and §3 (engineering specification workflow). Section 3c is the third sub-section of the broader Section 3 split (3a Feature Engineering → 3b Target Generation → 3c Model Layer + MLflow) authorized by the Section 3 handoff packet (`docs/reviews/2026-04-28_spec_03_features_targets_models_handoff_packet.md`); this packet narrows that earlier broad authorization to 3c specifically and makes the per-decision constraints inherited from 3a and 3b explicit.
 
 ---
 
-## How to use this document
+## 1. Authorization basis
 
-This handoff is the first thing a new Claude chat session should read when working on the **Quant Research Platform** project. It is not a substitute for the canonical files — it is a map that points to them and a snapshot of "where things stand right now."
+03c drafting is authorized to proceed from **five** explicit Approver-authorized sources, taken together as the de facto scope statement (mirroring the lightweight handoff pattern Section 3b used):
 
-### Source of truth: GitHub, not uploads
+(a) The general project handoff: `docs/current_claude_context_handoff.md`
+(b) Section 3 handoff packet (broader Section 3 split authorization): `docs/reviews/2026-04-28_spec_03_features_targets_models_handoff_packet.md`
+(c) Section 3a §12 forward references and Section 3a approval note §5.1 *"Open items handed forward to 03c"*
+(d) Section 3b §12 forward references and Section 3b approval note §5.1 *"Open items handed forward to 03c"*
+(e) This Section 3c handoff packet
 
-**Use the GitHub connector to read project files. Do not ask the human to upload files.** All canonical project documents live in the repository below. The human is the Approver, not a file-upload service; reading from GitHub is faster, less error-prone, and ensures Claude works against the actual current state of the repo rather than a possibly stale local copy.
-
-- **Repository:** `prodempsey/quant-research-platform`
-- **Branch:** `main`
-- **Connector:** GitHub (search the MCP registry for "github" if it isn't already connected; suggest the connector to the human if so).
-
-If for any reason the GitHub connector is unavailable, ask the human before falling back to file uploads — do not silently proceed against stale assumptions.
-
-### Files to read first, in order
-
-When a fresh Claude session begins, read these in order before responding to any new task:
-
-1. **This document** (`docs/current_claude_context_handoff.md`) — the map.
-2. **`docs/strategy_decision_record.md`** — the canonical SDR. v1.0 LOCKED. 18 numbered decisions.
-3. **`docs/engineering_workflow.md`** — the canonical EW. v1.5 LOCKED. Defines the Approver/Builder/Reviewer roles, the section-drafting workflow, the Approval Matrix (§2.3), the spec-section template (§3.2), the assumption classification rules (§3.3), the QA review checklist (§9), and the configuration-management discipline (§7).
-4. **`docs/traceability_matrix.md`** — the canonical traceability matrix. Currently **v0.4** (Sections 1, 2, 3a v1.0 LOCKED merged; Sections 3b, 3c, 4, 5, 6 still pending).
-5. **`docs/engineering_spec/`** — directory of locked Engineering Specification sections. Currently:
-   - `01_architecture_overview.md` (v1.0 LOCKED)
-   - `02_data_layer.md` (v1.0 LOCKED)
-   - `03a_feature_engineering.md` (v1.0 LOCKED / APPROVED)
-6. **`docs/reviews/`** — directory of approval notes, traceability companion artifacts, and Section-level handoff packets. Read whichever ones are relevant to the task at hand. Notable files:
-   - `2026-04-26_spec_01_architecture_overview_approval.md`
-   - `2026-04-27_spec_02_data_layer_approval.md`
-   - `2026-04-27_spec_02_data_layer_traceability_updates.md`
-   - `2026-04-28_spec_03_features_targets_models_handoff_packet.md`
-   - `2026-04-29_spec_03a_feature_engineering_approval.md`
-   - `2026-04-29_spec_03a_feature_engineering_traceability_updates.md`
+The eventual 03c approval note can cite this language directly, mirroring the 03b approval note's scope-basis citation.
 
 ---
 
-## Project at a glance
+## 2. Controlling documents (Builder consults all of them)
 
-**What it is:** A personal quant research platform for ETF tactical research. Phase 1 is research-only — no live trading, no broker integration, paper portfolio tracking only.
-
-**Maintainer / Approver:** Jeremy.
-
-**Builder for spec work:** Claude (Anthropic).
-
-**QA Reviewer for spec work:** ChatGPT.
-
-**Hosting:** Linux VPS (Hostinger), multi-container Docker stack.
-
-**Stack at a glance:**
-- Postgres as system of record (universe, prices, ops, features schemas).
-- MLflow for experiment tracking, with metadata in a separate Postgres database and artifacts in a named volume.
-- Dash app as the operator UI (read-only).
-- cron-in-container for scheduled jobs (ingestion, feature runs, model runs, backtests).
-- EODHD as the Phase 1 data provider, accessed only through the provider-abstraction boundary.
-- Python 3.12, `pyproject.toml` + pinned `requirements.txt`, ruff, pytest.
-
-**Phase 1 hard exclusions** (do not propose, do not silently introduce): live trading, broker SDKs, fundamentals, ETF holdings data, news, earnings transcripts, options data, Danelfin (deferred), individual stocks, autonomous research agents, commercial / customer-facing features.
+- Quant Research Platform — Strategy Decision Record v1.0 LOCKED ("SDR")
+- Quant Research Platform — Engineering Workflow v1.5 LOCKED ("EW")
+- Engineering Specification — Section 1 v1.0 LOCKED (`docs/engineering_spec/01_architecture_overview.md`)
+- Engineering Specification — Section 2 v1.0 LOCKED (`docs/engineering_spec/02_data_layer.md`)
+- Engineering Specification — Section 3a v1.0 LOCKED / APPROVED (`docs/engineering_spec/03a_feature_engineering.md`)
+- Engineering Specification — Section 3b v1.0 LOCKED / APPROVED (`docs/engineering_spec/03b_target_generation.md`)
+- Section 1 approval note (`docs/reviews/2026-04-26_spec_01_architecture_overview_approval.md`)
+- Section 2 approval note (`docs/reviews/2026-04-27_spec_02_data_layer_approval.md`)
+- Section 3a approval note (`docs/reviews/2026-04-29_spec_03a_feature_engineering_approval.md`)
+- Section 3b approval note (`docs/reviews/2026-04-29_spec_03b_target_generation_approval.md`)
+- `docs/traceability_matrix.md` v0.5 (post-3b lock state)
 
 ---
 
-## Roles (from EW §2.1)
+## 3. Scope (in scope for 03c v0.1)
 
-- **Approver (Jeremy)** has final decision authority on every section, every default, every strategy-affecting choice, and every Approval Matrix item. Claude does not silently resolve strategy-affecting questions — they are flagged as Open Questions for the Approver per EW §3.3.
-- **Builder (Claude)** drafts spec sections, applies targeted revisions, and produces lock-package artifacts (approval notes, traceability companion files). The Builder follows the EW §3.2 eleven-field template, classifies assumptions per EW §3.3, and respects the EW §3.5 stop conditions.
-- **QA Reviewer (ChatGPT)** reviews drafts against the EW §9 checklist and produces revision lists. Claude applies QA-driven revisions surgically (via `str_replace`) rather than rewriting whole documents.
+03c owns the model layer at the spec level. v0.1 covers all of:
 
----
+1. **`models.*` database schema** (writer-owned by 03c). At minimum: `models.model_runs`, `models.model_definitions` (or equivalent catalog), `models.predictions` (the per-`(etf_id, as_of_date)` model output surface), and a model-layer issue log (the `*.run_issues` pattern parallel to `features.feature_run_issues` and `targets.target_run_issues` — see Open Question §7.6 below). Run-level reproducibility anchored on `data_snapshot_id`. Row-level traceability via `model_run_id`. Database-level integrity for any model-set-version analogue.
 
-## Where things stand (as of 2026-04-29)
+2. **Phase 1 baseline model forms.** The dual-target framework per SDR Decision 6: a regression model trained on the `targets.target_values` regression family (excess return at 63 and 126 trading-day horizons) and a classification model trained on the `targets.target_values` classification family (outperformance at the same horizons). The specific baseline algorithm class (e.g., gradient boosted trees, regularized linear, etc.) is an Open Question for the Approver — see §7.
 
-### Locked artifacts
+3. **Calibration pipeline** per SDR Decision 7. SDR Decision 7 names the candidates (Platt / isotonic / logistic-on-folds); 03c picks the Phase 1 default and exposes the choice in `config/model.yaml` (Open Question §7).
 
-| Artifact | Status | Path |
-|---|---|---|
-| Strategy Decision Record | v1.0 LOCKED | `docs/strategy_decision_record.md` |
-| Engineering Workflow | v1.5 LOCKED | `docs/engineering_workflow.md` |
-| Engineering Spec — Section 1 (Architecture Overview) | v1.0 LOCKED | `docs/engineering_spec/01_architecture_overview.md` |
-| Engineering Spec — Section 2 (Data Layer) | v1.0 LOCKED | `docs/engineering_spec/02_data_layer.md` |
-| Engineering Spec — Section 3a (Feature Engineering) | v1.0 LOCKED / APPROVED | `docs/engineering_spec/03a_feature_engineering.md` |
-| Traceability Matrix | v0.4 | `docs/traceability_matrix.md` |
+4. **Combined-score formula** per SDR Decision 6's first testable formulation, integrating regression and classification model outputs into a single per-`(etf_id, as_of_date)` ranking score. The exact functional form is an Open Question — SDR Decision 6 names the framework but does not fix the formula. 03c proposes the first testable formula; Approver resolves.
 
-### Pending — drafting not yet authorized
+5. **Allowed values and semantics for `rank_method`** (closing the Section 2 `pending_section_3` sentinel obligation). 03c defines the closed enumeration of allowed `rank_method` values, the per-sleeve semantics, and the validation that every `universe.etfs.rank_method` is one of the allowed values before any ranking runs. 03b does not interpret `rank_method`; 03c does.
 
-- **Section 3b — Target Generation** (`docs/engineering_spec/03b_target_generation.md`)
-- **Section 3c — Model Layer + MLflow** (`docs/engineering_spec/03c_model_layer_mlflow.md`)
-- **Section 4 — Backtest, Attribution, Validation**
-- **Section 5 — Portfolio Management, Paper Trading, Order Intent**
-- **Section 6 — UI Layer**
+6. **Combined-score × sleeve-aware ranking interaction.** Per SDR Decision 5, ranking is sleeve-aware. 03c specifies how the combined score per `(etf_id, as_of_date)` interacts with the sleeve assignment to produce the final ranking output consumed by Section 5 (portfolio).
 
-The Approver will issue a fresh handoff packet under `docs/reviews/` (similar in shape to `2026-04-28_spec_03_features_targets_models_handoff_packet.md`) when authorizing each next section.
+7. **Model state lifecycle** per SDR Decision 12: the four states (Active / Warning / Paused / Retired), the transitions between them, and the schema fields recording state. 03c does NOT implement the multi-condition kill switch itself (Section 5 owns kill-switch enforcement) but defines the state machine and the conditions Section 5 will check.
 
-### Implementation status
+8. **MLflow writer-side integration.** Per SDR Decision 11 and Section 1's MLflow-as-tracking architecture: 03c is the only Phase 1 module that writes to MLflow. Every MLflow run links back to BOTH `features.feature_runs.feature_run_id` AND `targets.target_runs.target_run_id` to satisfy the EW §7 reproducibility list (per Section 3a approval note §4.6 and Section 3b approval note §4.6). MLflow tags / params / metrics conventions are 03c's to specify.
 
-**No code has been written. No migrations have been run. No containers have been built.** The locked spec sections are specifications, not builds. Implementation begins under the EW §3 → §10 build workflow once the Approver authorizes it, after enough sections are locked for a meaningful build slice.
+9. **`config/model.yaml`** — the model-layer config file owned by 03c. Strategy-affecting per EW §7. 03c specifies the YAML shape (model algorithm choice, hyperparameter ranges, calibration method, combined-score formula parameters, target-set-version / feature-set-version pinning, etc.) and the validation rules. **`config/targets.yaml` is NOT owned by 03c** — Section 3b owns it per Section 3b §11.6 #7. 03c may *read* target metadata at consumption time but does not modify the target-config file.
+
+10. **Training-data assembly contract.** 03c is responsible for joining `features.feature_values` (filtered on `features.feature_runs.status='succeeded'`) and `targets.target_values` (filtered on `targets.target_runs.status='succeeded'`) on `(etf_id, as_of_date)` to assemble training data. Both filters must be applied; the failed-run consumption discipline is binding. Front-edge horizon truncation must be handled correctly (the target side is missing for the most recent `max_horizon` trading days that have feature rows). 03c training-data-assembly tests verify both filters are applied and the front-edge truncation is handled correctly.
+
+11. **Tests** for all of the above, per EW §3.2 template field 9. Per-family tests, schema tests, MLflow integration tests, training-data-assembly tests, model state lifecycle tests, calibration tests, combined-score tests.
 
 ---
 
-## Section 3a quick-reference (most recent lock)
+## 4. Out of scope (explicitly NOT in 03c v0.1)
 
-Because Section 3a is the most recent lock and any Section 3b / 3c handoff will reference it heavily, here is a compact summary of what 3a does and does not own. The full text is in `docs/engineering_spec/03a_feature_engineering.md`.
-
-### What 03a owns
-
-- **Feature families** (Phase 1, in `config/features.yaml`):
-  - Family 1: returns / momentum (`return_21d`, `return_63d`, `return_126d`, `return_252d`)
-  - Family 2: realized volatility (`vol_realized_21d`, `vol_realized_63d`, `vol_realized_126d`)
-  - Family 3: trend strength — distance from SMA (`trend_dist_sma_50`, `trend_dist_sma_200`)
-  - Family 4: benchmark-relative excess return (`excess_return_vs_primary_benchmark_63d`, `excess_return_vs_primary_benchmark_126d`)
-  - Family 5: regime-side feature primitive (`regime_spy_above_sma_200`) — **default off**
-- **`features.*` schema** (four tables, all in the `features` schema):
-  - `features.feature_runs`
-  - `features.feature_definitions`
-  - `features.feature_values`
-  - `features.feature_run_issues`
-- **`config/features.yaml`** — strategy-affecting config; closed-set family validation.
-- **T-1 trading-day alignment** on every feature row (T-1 = most recent valid trading day strictly before signal date `T` per the relevant ETF's `prices.etf_prices_daily` rows; not calendar minus one).
-- **Eligibility-row omission contract** — no `features.feature_values` row is written for ETF/date pairs that are not rank-eligible per `universe.etf_eligibility_history`, or where `T < first_traded_date(e)` or `T >= delisted_date(e)`. Ineligible rows are absent, not stored with a flag.
-- **`data_snapshot_id` reproducibility chain** — run-level linkage on `features.feature_runs.data_snapshot_id`, row-level traceability via composite FK from `features.feature_values(feature_run_id, feature_set_version)` to `features.feature_runs(feature_run_id, feature_set_version)`.
-- **Database-level `feature_set_version` integrity** — `UNIQUE (feature_run_id, feature_set_version)` on `features.feature_runs`, plus two composite FKs from `features.feature_values` (one to `feature_runs`, one to `feature_definitions`).
-- **Open-run-before-validation lifecycle for blocked runs** — orchestrator opens the `features.feature_runs` row first, then validates snapshot and ingestion-run dependencies; on a block, it marks the run `'failed'` and writes a `features.feature_run_issues` row (FK satisfied); no `features.feature_values` rows are written for blocked runs.
-- **36 numbered required tests** (17 per-family in §8.1, 19 cross-cutting in §8.2).
-
-### What 03a does NOT own (forward references)
-
-- **Target generation** (regression, classification, forward excess-return labels at 63/126-day horizons, overlapping-label handling) — **03b**.
-- **Baseline models, calibration, MLflow writer-side integration, `models.*` schema, model state lifecycle, allowed `rank_method` values (closing the Section 2 `pending_section_3` sentinel), combined-score formula, `config/model.yaml`** — **03c**.
-- **Walk-forward harness, purge/embargo, transaction costs, attribution storage, regime reporting layer** — **Section 4**.
-- **Portfolio rules, BUY/HOLD/TRIM/SELL/REPLACE/WATCH actions, paper portfolio state, broker-neutral order intent** — **Section 5**.
-- **Dash UI screens** — **Section 6**.
-- **Full `regime/` subpackage and `regime.*` schema** — Sections 3 (computation) and 4 (consumption).
-
-### What 03a does NOT write to
-
-- `ops.data_quality_exceptions` — **ingestion-owned per Section 2 v1.0 LOCKED**. 03a does not write to this table or any `ops.*` table. Feature-layer data-quality issues land in `features.feature_run_issues` instead.
-- `universe.*`, `prices.*`, `targets.*`, `models.*`, MLflow, any provider table.
-
-### Open Questions still open after Section 3a lock (Approver's call)
-
-- **Index-only benchmarks** (§10.1 in 03a). Family 4 is unavailable for an ETF whose primary benchmark resolves index-only via `universe.benchmarks.index_symbol`; no silent substitution; no fallback to `secondary_benchmark_id`. Whether to pursue a Section 2 amendment for benchmark price storage remains the Approver's decision. **No such amendment is proposed by 03a.**
-- Plus seven Builder Proposed defaults (§10.2–§10.8) the Approver may revise via 03a amendment without disturbing the locked structural contracts.
+- **Walk-forward validation harness, purge/embargo enforcement, leakage tests, regime reporting, attribution storage** — Section 4 owns these. 03c records the per-row metadata Section 4 needs (`data_snapshot_id`, `feature_run_id`, `target_run_id`, `model_run_id`) on every prediction row but does not run walk-forward itself.
+- **Multi-condition kill switch enforcement and live promotion gates** — Section 5 owns these. 03c defines the model state lifecycle; Section 5 acts on it.
+- **Portfolio construction, risk rules, position sizing, paper-only enforcement** — Section 5.
+- **UI surfaces** (Model Registry / Run Browser, leaderboards, Model Cards) — Section 6. 03c specifies the schema Section 6 reads from.
+- **Modifying `targets.*`, `features.*`, `universe.*`, `prices.*`, `ops.*` schemas** — these are owned by Section 3b, 3a, and 2 respectively. 03c is read-only against all of them. 03c does NOT write to `ops.data_quality_exceptions` (per Section 2 v1.0 LOCKED, ingestion-owned in Phase 1).
+- **Live trading code paths or broker integration** — out of Phase 1 entirely per SDR Decision 1.
+- **Sleeve-conditional model variants** (a separate model per sleeve, etc.) — out of scope unless the Approver explicitly directs otherwise. Phase 1 default is one model per family across all sleeves, with sleeve-aware ranking applied downstream of model output.
+- **Autonomous research agents, Danelfin integration, fundamentals/holdings/news/earnings/options inputs** — out of Phase 1 per SDR Decisions 1 and 14.
+- **Implementation / code / migrations** — 03c v0.1 is a specification, not a build. Migration filenames and module file names are at Builder discretion within the EW §8 conventions; the spec references the schema names but does not prescribe filenames.
 
 ---
 
-## Working norms for fresh Claude sessions
+## 5. Constraints inherited from prior locked sections
 
-These norms come from the EW and from the established working pattern across Sections 1, 2, and 3a. Following them avoids re-litigating ground covered.
+The Builder must respect ALL of the following without re-litigating. Any divergence requires an explicit amendment to the section that owns the constraint, not a silent override.
 
-### Always
+### 5.1 From Section 1 (v1.0 LOCKED) — architectural invariants
 
-- **Read from GitHub, not uploads.** Repository `prodempsey/quant-research-platform`, branch `main`. If the GitHub connector isn't available, ask the human before doing anything else.
-- **Acknowledge the task and read the canonical files before drafting.** For any spec-related task, read the SDR, EW, the relevant locked sections, and the relevant approval notes. State what was read.
-- **Honor the EW §3.2 eleven-field template** when drafting a new section: Purpose, Relevant SDR decisions, In scope, Out of scope, Inputs and outputs, Data contracts, Config dependencies, Required tests, Edge cases and failure behavior, Open questions, Explicit assumptions.
-- **Classify every assumption per EW §3.3.** The seven categories are: *Derived from SDR/EW*, *Derived from Section 1*, *Derived from Section 2* (extend per locked predecessor section), *Implementation default (no strategy impact)*, *Approver-resolved default*, *Proposed default requiring Approver approval*, *Open question for Approver*. Strategy-affecting items are the last two — never the third or fourth.
-- **Use Approver-issued handoff packets** as the authoritative scope statement for a new section. If the human starts a section without one, ask for one before drafting v0.1.
-- **Apply targeted revisions surgically** via `str_replace` on the existing draft. Do not rewrite whole documents in response to QA feedback.
-- **Produce lock packages in the established three-artifact shape** (when locking a section): the section itself promoted to v1.0 LOCKED / APPROVED, a separate approval note under `docs/reviews/`, and a separate traceability matrix update companion under `docs/reviews/`.
-- **Match canonical file names exactly.** No spaces, no hyphens-instead-of-underscores, no title casing. Examples: `03a_feature_engineering.md` (not `03a feature engineering.md`), `03c_model_layer_mlflow.md` (not `03c_model_layer.md`).
+- Provider-abstraction boundary: no `models/` module imports from `providers/`, `ingestion/`, or any provider-specific library.
+- Postgres-as-system-of-record: 03c's authoritative state is in Postgres (`models.*`); MLflow is the tracking surface, not the system of record.
+- No-live-broker boundary: 03c writes no code that could enable live trading.
+- All paths via `pathlib.Path`; container-local paths only.
+- No secrets in code, config, fixtures, logs, or docs.
+- Time-aware research auditability invariant 7: 03c's contribution is honoring the upstream T-1 / forward-Convention-B alignment from 3a/3b (not redefining it) and adding model-side reproducibility metadata (`model_run_id` linkage to `feature_run_id`, `target_run_id`, `data_snapshot_id`).
+- UI is read-only: `models.*` schema design supports read-only consumption from `ui/`.
 
-### Never
+### 5.2 From Section 2 (v1.0 LOCKED) — data-layer constraints
 
-- **Never silently resolve strategy-affecting questions.** Flag them as Open Questions for the Approver per EW §3.3.
-- **Never propose modifications to the SDR.** The SDR is v1.0 LOCKED. SDR revisions follow EW §6 impact assessment and are the Approver's call, not the Builder's.
-- **Never propose modifications to Section 1 or Section 2 within a later section's draft.** If a Section 2 amendment is genuinely needed, flag it as an Open Question; do not draft the amendment within the current section.
-- **Never start implementation, write code, run migrations, or build containers** unless the Approver has explicitly authorized the implementation phase for the relevant section.
-- **Never expand scope beyond Phase 1.** No fundamentals, holdings, news, earnings, options, individual stocks, autonomous research agents, commercial features, or live broker integration.
-- **Never reframe locked decisions** ("I think Decision N actually means…"). Locked decisions are locked. If a locked decision seems wrong or incomplete in light of new information, raise the concern explicitly and let the Approver decide.
-- **Never bypass the eligibility, T-1, adjusted-close, or `data_snapshot_id` contracts** in any later-section draft. These are the principal Section 3a / Section 2 / Section 1 invariants.
+- 03c is read-only against `prices.*`, `universe.*`, `ops.*`, `features.*`, `targets.*`. The only schema 03c writes to is `models.*`.
+- 03c does NOT write to `ops.data_quality_exceptions`. The data-quality framework remains ingestion-owned per Section 2 v1.0 LOCKED constraint #1.
+- `data_snapshot_id` is the reproducibility anchor on the writer side. Every `models.model_runs` row carries one.
+- Adjusted-close is canonical research price. Any model that uses raw OHLCV is forbidden without an explicit Section 2 amendment.
+- Provider raw payloads, ingestion runs, and corporate actions are read-only from 03c's perspective.
 
-### Process tells (working pattern across the locked sections)
+### 5.3 From Section 3a (v1.0 LOCKED / APPROVED) — feature-side constraints
 
-- A typical section moves v0.1 → v0.2 → v0.3 → v0.4 → v1.0 LOCKED / APPROVED, with QA-driven revisions at each step. Section 3a took four revision passes; Section 2 took three; Section 1 took two.
-- Each revision pass produces a numbered revisions list with a "Revision N — short title — locations affected" structure. Builder applies edits surgically and confirms each revision lands.
-- Lock package = three artifacts: locked spec, approval note, traceability matrix update companion. The approval note lists every explicit Approver decision; the traceability update companion proposes replacement rows for affected SDR decisions.
-- After each lock, the Approver applies the traceability companion's proposed rows to `docs/traceability_matrix.md` as a separate task.
+- **Failed-run consumption discipline:** 03c reads `features.feature_values` ONLY filtered on `features.feature_runs.status='succeeded'`. Tests must verify this filter on every feature consumption path.
+- **`feature_set_version` integrity:** 03c reads features at a pinned `feature_set_version` recorded in `config/model.yaml`; the database-level UNIQUE / composite-FK constraints are already enforced by 3a's schema.
+- **Eligibility-row omission contract:** 03c does NOT filter feature rows by re-deriving eligibility — absence in `features.feature_values` is the consumption signal. 03c likewise does NOT add rows for ineligible pairs.
+- **T-1 trading-day alignment:** 03c does NOT re-align features. The `as_of_date` on a feature row is the signal date `T`; the values themselves are bounded by `as_of_date <= T-1`. 03c consumes them as-is.
+- **Index-only benchmark interim constraint:** 03c may not introduce a fallback-to-secondary-benchmark mechanism. Any feature row with `feature_value = NULL` due to index-only-benchmark conditions is consumed as a NULL by the model (handling is a model-level concern: imputation, exclusion, or model-class-specific NULL semantics — Builder Open Question §7).
 
----
+### 5.4 From Section 3b (v1.0 LOCKED / APPROVED) — target-side constraints
 
-## Repository layout (for orientation)
+- **Failed-run consumption discipline (parallel to 5.3):** 03c reads `targets.target_values` ONLY filtered on `targets.target_runs.status='succeeded'`.
+- **`target_set_version` integrity:** 03c reads targets at a pinned `target_set_version` recorded in `config/model.yaml`. Database-level UNIQUE / composite-FK constraints are already enforced by 3b's schema.
+- **§6.5 null-vs-no-row taxonomy is canonical:** 03c does NOT reframe Bucket 1 (no-row) cases as `target_value = NULL` rows or Bucket 2 (row-with-NULL) cases as row absences. 03c training-data-assembly logic respects the existing taxonomy.
+- **Convention B trading-day semantics:** 03c does NOT redefine `entry_date` / `exit_date` (e.g., does not silently switch to calendar-day arithmetic). The 03b-recorded window metadata is the canonical source.
+- **No purge/embargo at target emission:** Section 4 owns purge/embargo. 03c records `model_run_id` linkage to `target_run_id` so Section 4 has the per-row window metadata it needs; 03c does NOT apply purge/embargo at training-data-assembly time. (03c MAY apply in-fold cross-validation discipline at training time, but the walk-forward train/test boundary is Section 4's responsibility.)
+- **Index-only benchmark interim constraint (parallel to 5.3):** Same rule on the target side.
+- **`targets.target_run_issues` is read-only from 03c.** 03c may filter or annotate model runs that depend on target runs with issues, but does not write to `target_run_issues`.
 
-```
-prodempsey/quant-research-platform
-├── docs/
-│   ├── current_claude_context_handoff.md      # this file
-│   ├── strategy_decision_record.md            # SDR v1.0 LOCKED
-│   ├── engineering_workflow.md                # EW v1.5 LOCKED
-│   ├── traceability_matrix.md                 # v0.4
-│   ├── engineering_spec/
-│   │   ├── 01_architecture_overview.md        # v1.0 LOCKED
-│   │   ├── 02_data_layer.md                   # v1.0 LOCKED
-│   │   └── 03a_feature_engineering.md         # v1.0 LOCKED / APPROVED
-│   └── reviews/
-│       ├── 2026-04-26_spec_01_architecture_overview_approval.md
-│       ├── 2026-04-27_spec_02_data_layer_approval.md
-│       ├── 2026-04-27_spec_02_data_layer_traceability_updates.md
-│       ├── 2026-04-28_spec_03_features_targets_models_handoff_packet.md
-│       ├── 2026-04-29_spec_03a_feature_engineering_approval.md
-│       └── 2026-04-29_spec_03a_feature_engineering_traceability_updates.md
-└── (no code yet — Phase 1 implementation has not been authorized)
-```
+### 5.5 Additional constraints inherited from the 3a/3b approval notes' "conditions on subsequent sections"
 
-When the next section is authorized, expect new files under `docs/engineering_spec/` and `docs/reviews/`. When implementation begins, expect a `src/quant_research_platform/`, `tests/`, `migrations/`, `config/`, `Dockerfile`, `docker-compose.yml`, etc., per the Section 1 layout.
+- The two issue-log tables (`features.feature_run_issues`, `targets.target_run_issues`) are deliberately separate from `ops.data_quality_exceptions`. If 03c introduces a model-layer issue log (Open Question §7.6), it follows the same pattern: a closed `issue_type` enumeration, a `severity` enumeration, an open-run-before-validation lifecycle, NOT NULL FK on `model_run_id`, and writes to `models.*` only.
+- The benchmark-resolution interim constraint applies on the model side too: no silent benchmark substitution, no fallback to `secondary_benchmark_id`, anywhere in 03c's code paths.
+- The reproducibility chain is `ops.data_snapshots → features.feature_runs (and targets.target_runs) → models.model_runs → MLflow`. 03c MAY NOT bypass this chain.
 
 ---
 
-## Common task patterns and how to handle them
+## 6. EW §3.2 template fields the spec must populate
 
-### "Draft Section 3X v0.1"
+Per EW §3.2, Section 3c v0.1 must populate the following eleven fields **in this order**:
 
-1. Read this handoff, then read the SDR, EW, all locked sections (1, 2, 3a), and the section-specific handoff packet under `docs/reviews/`.
+1. Purpose
+2. Relevant SDR decisions
+3. In scope
+4. Out of scope
+5. Inputs and outputs
+6. Data contracts (covering `models.*` schema in detail)
+7. Config dependencies (covering `config/model.yaml` and read dependencies on `config/features.yaml`, `config/targets.yaml`, `config/universe.yaml`)
+8. Required tests (per-family + cross-cutting)
+9. Edge cases and failure behavior
+10. Open questions
+11. Explicit assumptions (classified per EW §3.3 — Approver-resolved defaults, Builder Proposed defaults requiring Approver approval, Open Questions for Approver, Implementation defaults with no strategy impact)
+12. Section 3c → Section 4 handoff (forward references only)
+13. Proposed traceability matrix updates (draft only — full companion artifact produced as a separate review file at lock time)
+
+Every Open Question and Builder Proposed default is **visibly classified** per EW §3.3. **Nothing is silently resolved.**
+
+---
+
+## 7. Non-exhaustive list of Open Questions the Builder will surface
+
+These are the Open Questions the prior session identified as belonging to 03c. The Builder will likely identify more during drafting; this list is a starting point, not a closed set.
+
+### 7.1 Combined-score formula (SDR Decision 6's first testable formulation)
+Functional form combining regression and classification model outputs. Candidates: linear weight (`w * regression_score + (1-w) * classification_probability`); product (`regression_score * classification_probability`); rank-then-combine. **Builder proposes; Approver resolves.**
+
+### 7.2 Phase 1 baseline model class
+SDR Decision 6 names the dual-target framework but not the model class. Candidates: gradient boosted trees (XGBoost / LightGBM), regularized linear (ridge, lasso, elastic net), or simple baselines (e.g., past-return-as-prediction). **Builder proposes; Approver resolves.**
+
+### 7.3 Calibration method
+SDR Decision 7 names Platt / isotonic / logistic-on-folds as candidates. Phase 1 default? **Builder proposes; Approver resolves.**
+
+### 7.4 `rank_method` allowed values and semantics
+The closed enumeration that closes Section 2's `pending_section_3` sentinel obligation. Candidates likely include: `combined_score_descending`, `regression_score_descending`, `classification_probability_descending`, possibly sleeve-conditional variants. **Builder proposes; Approver resolves.**
+
+### 7.5 NULL-feature handling at model train/predict time
+Features carrying `feature_value = NULL` (per the Bucket 2 cases in 3a) reach the model. Phase 1 strategy: imputation (mean / median / sentinel), exclusion (drop the row), or model-class-specific (XGBoost handles NULLs natively). **Builder proposes; Approver resolves.**
+
+### 7.6 Model-layer issue log
+Should 03c introduce `models.model_run_issues` parallel to `feature_run_issues` and `target_run_issues`? **Builder Proposed default: yes**, for consistency with the established pattern, with a closed `issue_type` enumeration covering at minimum: `'invalidated_snapshot_blocked'`, `'failed_feature_run_blocked'`, `'failed_target_run_blocked'`, `'partial_*` analogues, `'model_run_failed'`. **Approver resolves.**
+
+### 7.7 Model state lifecycle transitions and gating conditions
+SDR Decision 12 names the four states. 03c specifies the state machine (allowed transitions, conditions, who can trigger). **Builder proposes; Approver resolves.**
+
+### 7.8 MLflow tags / params / metrics conventions
+What gets recorded as tags vs. params vs. metrics. **Builder proposes; mostly Implementation default with no strategy impact unless the Approver wants to override.**
+
+### 7.9 `models.*` migration filename
+**Implementation default with no strategy impact** — assigned at module-build time per EW §8 conventions, mirroring 3a's `features.*` and 3b's `targets.*` deferrals.
+
+### 7.10 Sleeve-conditional model variants
+Phase 1 default: one model per family across all sleeves; sleeve-aware ranking is applied downstream of model output. Approver may direct sleeve-conditional models if desired. **Builder Proposed default: cross-sleeve.**
+
+### 7.11 Cross-validation strategy at training time
+03c may apply in-fold CV during training (separate from Section 4's walk-forward harness). **Builder proposes; Approver resolves.**
+
+### 7.12 Whether to introduce model versioning beyond MLflow's run-id
+A `model_set_version` analogue to `feature_set_version` / `target_set_version`? **Builder Proposed default: yes**, for consistency. **Approver resolves.**
+
+This list is not exhaustive. The Builder will identify additional Open Questions during drafting and classify them per EW §3.3.
+
+---
+
+## 8. Approval gate
+
+Per EW §2.3 Approval Matrix, Section 3c v0.1 falls under the following items requiring Approver approval:
+
+- Engineering Specification section finalization (per EW §3.4)
+- Database schema changes at the spec level (the `models.*` schema)
+- Strategy-affecting YAML config changes at the spec level (`config/model.yaml`)
+- Changes to feature, target, or label definitions (the dual-target framework's model-side cash-out, the combined-score formula, the calibration method)
+- Changes to ranking math (`rank_method` allowed values and semantics)
+- Model registry schema and model state lifecycle (per SDR Decisions 11 and 12)
+
+The eventual 03c approval note will enumerate exactly which Approval Matrix items the section satisfies, mirroring the Section 3a and 3b approval notes' §1 *What approval covers* sections.
+
+---
+
+## 9. Workflow expectation (EW §3)
+
+The Builder follows the standard EW §3 cycle:
+
+1. **v0.1 DRAFT.** Builder produces the initial draft in /home/claude (or equivalent workspace), populating all eleven §3.2 template fields in order. Every assumption classified per EW §3.3. Honors all constraints in §5 of this packet. Surfaces Open Questions visibly per §7 and any additions found during drafting.
+2. **Approver reviews v0.1.** Issues a targeted revision instruction (typically a numbered list of specific revisions, plus preservation of accepted v0.1 strengths). 03c is the largest section so far — expect more revisions than 3a (5) or 3b (6).
+3. **v0.1 → v0.2 revision pass.** Builder applies the Approver's revisions surgically (str_replace edits, not whole-doc rewrites). Each revision is recorded in a v0.2 changelog entry preserving v0.1 verbatim.
+4. **(Optional) v0.2 → v0.3 cleanup pass** if the Approver issues a follow-up cleanup instruction (mirroring the 03b v0.3 pattern).
+5. **Lock package.** Approver authorizes promotion to v1.0 LOCKED / APPROVED. Builder produces three artifacts:
+   - `docs/engineering_spec/03c_model_layer_mlflow.md` v1.0 LOCKED / APPROVED
+   - `docs/reviews/<DATE>_spec_03c_model_layer_mlflow_approval.md` (the approval note)
+   - `docs/reviews/<DATE>_spec_03c_model_layer_mlflow_traceability_updates.md` (the traceability companion)
+6. **Approver applies the traceability merge** to `docs/traceability_matrix.md` per the runbook (`HOW_TO_apply_traceability_matrix_update.md`); matrix v0.5 → v0.6.
+7. **Section 4 handoff packet** is issued separately, after 03c lock.
+
+---
+
+## 10. Output format
+
+03c v0.1 is a single markdown file. No code. No migrations. No images. No fancy formatting beyond the EW conventions established by 3a and 3b. Tables for schema definitions are fine. YAML blocks are fine for `config/model.yaml` shape. Everything else is prose.
+
+The Builder uses str_replace edits (surgical) once the v0.1 baseline is in place — not whole-doc rewrites — to preserve EW revision discipline.
+
+The Builder DOES NOT:
+
+- Write code.
+- Run migrations.
+- Build containers.
+- Modify any other spec section.
+- Modify the SDR or EW.
+- Propose Section 1 amendments without explicit Approver direction (the same discipline 3a and 3b followed).
+- Silently resolve any Open Question.
+
+---
+
+## 11. Notes on the fresh-context-window handoff
+
+Section 3c is being drafted in a fresh chat window with no prior session memory. The Builder should:
+
+1. Read this handoff packet first.
+2. Read `docs/current_claude_context_handoff.md` for the project map.
+3. Read SDR v1.0 and EW v1.5 in their entirety.
+4. Read Sections 1, 2, 3a, and 3b in their entirety.
+5. Read all four prior approval notes (Section 1, 2, 3a, 3b).
+6. Read `docs/traceability_matrix.md` v0.5 (post-3b lock state).
+7. Confirm understanding back to the Approver before producing v0.1.
+
+The Approver may direct the Builder to skip step 7 and proceed directly to v0.1 if context is clear; default is to confirm.
+
+---
+
+**Signed:** Jeremy (Approver), 2026-04-29.
+
+**End of Section 3c handoff packet.**
 2. Confirm receipt of the handoff packet and acknowledge any Open Questions in it before producing v0.1.
 3. Use the EW §3.2 eleven-field template in order. Classify every assumption per EW §3.3.
-4. Output the draft as a markdown artifact with the exact canonical filename (e.g., `03b_target_generation.md`).
-
-### "Apply QA revisions to v0.X"
-
-1. Read the QA revision list carefully. Each revision typically names affected sections.
-2. Apply each revision via targeted `str_replace` edits, one at a time. Do not rewrite the whole document.
-3. After each revision, verify with `grep` or by viewing the affected region.
-4. Add a new changelog entry summarizing the revisions; preserve historical changelog entries verbatim.
-5. Output the revised draft (e.g., promoted from v0.X to v0.X+1).
-
-### "Promote v0.X to v1.0 LOCKED"
-
-1. Produce three artifacts in the established shape:
-   - The section itself, with status flipped to v1.0 LOCKED / APPROVED, a v1.0 changelog entry added, and minor wording cleanup applied (stale "v0.X scope" references in current spec body, not in changelog entries).
-   - The approval note: `docs/reviews/YYYY-MM-DD_spec_03X_<name>_approval.md`. Mirror the Section 1 / 2 / 3a approval-note structure: what approval covers, process trail, companion artifacts, conditions on subsequent sections, open items handed forward, implementation status, signed approval.
-   - The traceability matrix update companion: `docs/reviews/YYYY-MM-DD_spec_03X_<name>_traceability_updates.md`. Mirror the Section 2 / 3a companion-file structure: replacement rows in 7-column format, audit findings, maintainer notes.
-2. Do not apply the traceability companion's rows to `docs/traceability_matrix.md` unless explicitly instructed.
-
-### "Apply Section 3X traceability matrix updates"
-
-1. Read the Section 3X traceability companion under `docs/reviews/`.
-2. Read the current `docs/traceability_matrix.md`.
-3. Apply replacement rows surgically. Preserve verbatim the rows for decisions not affected.
-4. Add a version-history entry to the matrix's Notes section.
-5. Update the document status header and the in-spec interpretation note.
-
-### "Something else"
-
-If the task isn't one of the above patterns — e.g., a Section 2 amendment is genuinely needed, an SDR revision is being considered, an implementation phase is being authorized, or the Approver wants to discuss a strategic question — read the relevant files and ask for clarification before producing artifacts. Do not improvise on patterns the project hasn't established.
-
----
-
-## What this handoff is not
-
-- **Not a substitute for the canonical files.** Always read the SDR, EW, and locked sections directly. This handoff summarizes; the canonical files specify.
-- **Not authoritative on locked content.** If this handoff and a locked file disagree, the locked file wins. The maintainer (Jeremy) updates this handoff manually after each lock; lag between this file and the actual repo state is possible.
-- **Not a place to store decisions.** Decisions live in the SDR (strategy), EW (process), spec sections (engineering), and approval notes (Approver-resolved defaults). This handoff is a navigation aid only.
-
----
-
-## Quick start checklist for a fresh Claude session
-
-When a new chat begins, run through this once:
-
-- [ ] Confirm GitHub connector is available; if not, ask the human.
-- [ ] Read `docs/current_claude_context_handoff.md` (this file) end to end.
-- [ ] Read `docs/strategy_decision_record.md` (the SDR).
-- [ ] Read `docs/engineering_workflow.md` (the EW).
-- [ ] Read `docs/traceability_matrix.md` (current state).
-- [ ] List `docs/engineering_spec/` and `docs/reviews/` to confirm what's locked and what handoff packets exist.
-- [ ] Read the locked Engineering Spec sections relevant to the current task (1, 2, 3a as of this writing).
-- [ ] Read any Section-level handoff packet relevant to the current task.
-- [ ] Acknowledge what was read, what state the project is in, and what the current task appears to be. Then ask for the explicit task statement if it isn't already in the user's first message.
-
----
-
-**End of handoff.**
