@@ -6,6 +6,8 @@
 **Document status:** v0.2.1 DRAFT / targeted polish pass on top of v0.2  
 **Created:** 2026-04-30  
 **Last updated:** 2026-05-01  
+**Approval:** v1.0 LOCKED / APPROVED 
+**Approved by:**Approved by Jeremy dempsey May 1 2026
 
 ---
 
