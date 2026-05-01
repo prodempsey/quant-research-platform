@@ -3,8 +3,8 @@
 **Phase 1 scope:** ETF tactical research platform  
 **Document type:** Runbook / setup procedure  
 **Canonical suggested path:** `docs/runbooks/vps_setup_procedure.md`  
-**Document status:** v0.4 DRAFT — targeted user-context cleanup after Claude review  
-**Approval:** Not yet approved  
+**Document status:** v1.0 LOCKED / APPROVED 
+**Approval:** Approved by Jeremy Dempsey May 1 2026
 **Version:** 0.4  
 **Created:** 2026-04-30  
 **Last updated:** 2026-05-01  
