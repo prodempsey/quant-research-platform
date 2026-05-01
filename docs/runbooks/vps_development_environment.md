@@ -1,8 +1,8 @@
 # VPS Development Environment — Runbook
 
 **Phase 1 scope:** ETF tactical research platform.
-**Document status:** v0.2 DRAFT — pending Approver review.
-**Approval:** (not yet approved)
+**Document status:** v1.0 LOCKED / APPROVED 
+**Approval:** Approved by Jeremy Dempsey Apr 30 2026
 **Date:** 2026-04-30
 **Document type:** Practical operating procedure. Documentation only — no implementation, no scripts, no `docker-compose.yml` changes, no application code changes, no new engineering specification section, no ADR, no new tool installs.
 **Companion documents:**
