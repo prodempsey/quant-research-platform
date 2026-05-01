@@ -1,28 +1,82 @@
 # Quant Research Platform — VPS Setup Procedure
 
 **Phase 1 scope:** ETF tactical research platform  
-**Document type:** Runbook / procedure  
+**Document type:** Runbook / setup procedure  
 **Canonical suggested path:** `docs/runbooks/vps_setup_procedure.md`  
+**Document status:** v0.4 DRAFT — targeted user-context cleanup after Claude review  
+**Approval:** Not yet approved  
+**Version:** 0.4  
 **Created:** 2026-04-30  
-**Status:** Draft procedure for review before committing  
+**Last updated:** 2026-05-01  
+
+**Source authority:**
+
+- Quant Research Platform — Strategy Decision Record v1.0 LOCKED / APPROVED
+- Quant Research Platform — Engineering Workflow v1.5 LOCKED
+- Locked Engineering Specification sections 01–06
+- `docs/traceability_matrix.md`
+
+**Companion runbooks / governance documents:**
+
+- `docs/runbooks/vps_security_baseline.md`
+- `docs/runbooks/vps_development_environment.md`
+- `docs/runbooks/governor_gated_github_pr_agent_loop.md`
+- `docs/implementation_context_governance.md`, if present in the repository
 
 ---
 
-## Security prerequisite
+## Changelog
 
-Before installing the application stack, complete `docs/runbooks/vps_security_baseline.md`.
+### v0.4 DRAFT — targeted user-context cleanup after Claude review
 
-The VPS must have SSH key-based access, root/password SSH login disabled, UFW enabled, Fail2ban enabled for SSH, automatic security updates configured, Docker exposure reviewed, and no public exposure of Postgres, MLflow, Dash, or application service ports unless explicitly approved through the project deployment-exposure process.
+Targeted cleanup after Claude QA of v0.3. No application code, `docker-compose.yml`, Engineering Specification sections, or traceability matrix changes are made by this runbook. Main changes:
 
-Do not continue with Docker, Postgres, MLflow, Dash, Claude Code, Codex, Cursor, or project secrets until the security baseline checklist is complete.
+1. Clarified that GitHub CLI authentication is per Linux user and should be run as the lane user that will use `gh` for PR work.
+2. Added a user-context callout at the start of the Node/npm section because npm global prefix and AI CLI installs are per-user.
+3. Split Appendix A verification commands into admin-context checks and lane-user checks so Docker checks are not accidentally run as `quantdev` with sudo assumptions.
+4. Updated the readiness checklist to qualify Claude Code and Codex installs/authentication by lane user.
+5. Replaced ambiguous "Section 1" provider wording with `docs/engineering_spec/01_architecture_overview.md`.
+
+### v0.3 DRAFT — targeted QA follow-up after Claude review
+
+Targeted cleanup after Claude QA of v0.2. No application code, `docker-compose.yml`, Engineering Specification sections, or traceability matrix changes are made by this runbook. Main changes:
+
+1. Verified and clarified that lane-user names (`quantdev`, `quantstage`, `quantprod`) are inherited from `docs/runbooks/vps_development_environment.md`.
+2. Added an explicit prerequisite before lane commands: lane users must be created per the development-environment runbook before lane-specific commands are run.
+3. Verified that locked source documents currently reference Hostinger as the initial VPS provider assumption; provider-neutral operational wording is preserved until source-of-truth documents are amended.
+4. Replaced ambiguous "Section 2" `.env` references with `docs/engineering_spec/02_data_layer.md` and clarified that variable names and values shown in this runbook are illustrative.
+5. Clarified that AI CLI npm installs are per Linux user; for normal dev-lane work, install Claude Code and Codex under `quantdev` or the lane user that will run them.
+6. Marked Appendix A as a human-readable checklist, not a single-shot script.
+7. Softened references to the project Dockerfile before implementation and removed a duplicate `postgresql-client` install line.
+
+### v0.2 DRAFT — targeted setup / procedure reconciliation
+
+Targeted cleanup after QA review. No application code, `docker-compose.yml`, Engineering Specification sections, or traceability matrix changes are made by this runbook. Main changes:
+
+1. Added source-authority, status, companion-document, changelog, open-questions, and closing-statement structure.
+2. Removed duplicated security procedures and made `vps_security_baseline.md` the sole owner of SSH hardening, UFW, Fail2ban, unattended security updates, Docker exposure security, provider firewall, and off-host backup baseline.
+3. Removed Docker group membership as a default setup step; initial setup uses `sudo docker` and `sudo docker compose`.
+4. Kept Docker daemon log rotation, but classified it as Docker host hygiene rather than security-baseline ownership.
+5. Added Docker port-binding standard: published ports bind to `127.0.0.1`; Docker-published ports are not treated as protected by UFW.
+6. Reconciled project layout with `vps_development_environment.md`: `/srv/quant/<lane>/quant-research-platform/` is the VPS lane layout; no parallel `~/quant` clone is maintained on the VPS.
+7. Reconciled user model: `deploy` is the SSH/admin user; `quantdev`, `quantstage`, and `quantprod` are lane users governed by the development-environment runbook.
+8. Made SSH tunnel examples lane-aware and avoided inventing MLflow lane ports.
+9. Trimmed Python library inventory to neutral dependency categories; package choices and pins belong to project manifests and locked specifications.
+10. Cleaned Appendix A so it starts after the security baseline and does not run security-baseline commands.
+11. Replaced duplicated AI-agent operating rules with references to the governance runbooks.
+12. Added provider-neutral wording and an open question for final VPS provider selection.
+
+### v0.1 DRAFT
+
+Initial VPS setup procedure covering OS setup, security setup, Git/GitHub CLI, Docker, Python, Node, Claude Code, Codex, optional Cursor, `.env`, Postgres, MLflow, Dash/app container expectations, SSH tunnels, backups, health checks, and agent guardrails.
 
 ---
 
 ## 1. Purpose
 
-This runbook defines what to download, install, and configure on the Ubuntu VPS before Phase 1 implementation and deployment of the `quant-research-platform` project.
+This runbook defines the post-security setup procedure for preparing an Ubuntu VPS to operate the `quant-research-platform` project.
 
-It is intentionally procedural. It is not an Engineering Specification section and does not change the approved project architecture.
+It is intentionally procedural. It is not an Engineering Specification section, not an ADR, and not implementation authorization. It does not change the approved project architecture, strategy, service topology, deployment exposure, no-live-trading boundary, or traceability matrix.
 
 The goal is to make the VPS reproducible enough that the platform can be rebuilt from:
 
@@ -34,9 +88,56 @@ The goal is to make the VPS reproducible enough that the platform can be rebuilt
 
 ---
 
-## 2. Controlling project decisions
+## 2. Source authority and status
 
-This runbook follows the locked project decisions already approved for Phase 1:
+This runbook is downstream of the locked project sources. If this runbook conflicts with the SDR, Engineering Workflow, locked Engineering Specification sections, traceability matrix, or companion runbooks, the locked / controlling source wins.
+
+This runbook implements the approved Phase 1 operating pattern at the setup-procedure level:
+
+- Ubuntu 24.04 LTS on a selected Linux VPS provider;
+- Docker Engine and Docker Compose plugin on the host;
+- Postgres, MLflow, and the application/Dash stack running in containers;
+- credentials injected from host `.env` into containers;
+- YAML config committed under `config/` and mounted read-only;
+- Dash and MLflow reached through SSH tunnels, not public exposure;
+- no live broker SDKs, broker credentials, or order-placement code paths;
+- AI Maestro not installed and not approved as a Phase 1 tool.
+
+Operational defaults in this runbook, such as Node.js LTS baseline, npm user-level prefix, host helper packages, and setup command examples, are setup-level defaults. They are subject to override by a future approved deployment specification or Approver-directed runbook amendment.
+
+---
+
+## 3. Security prerequisite
+
+Before installing Docker, Postgres containers, MLflow containers, Dash/app containers, Claude Code, Codex, Cursor, or project secrets, complete:
+
+```text
+
+docs/runbooks/vps_security_baseline.md
+```
+
+Confirm `docs/runbooks/vps_security_baseline.md` has been completed end-to-end before continuing. SSH hardening, UFW, Fail2ban, `deploy` user setup, unattended security updates, Docker exposure security, provider firewall, and the off-host backup baseline are owned by the security baseline runbook and are not re-implemented here.
+
+This setup procedure may still include reminders that Postgres, MLflow, Dash, and app service ports must not be publicly exposed. Those reminders do not replace the security baseline.
+
+---
+
+## 4. Companion-runbook ownership boundaries
+
+| Area | Owning document |
+|---|---|
+| SSH hardening, UFW, Fail2ban, provider firewall, Docker exposure safety, off-host backup baseline | `docs/runbooks/vps_security_baseline.md` |
+| `/srv/quant` lane layout, lane users, Compose project names, lane-specific port conventions, dev/stage/prod separation | `docs/runbooks/vps_development_environment.md` |
+| Tool installation and general VPS setup after the security baseline | This runbook |
+| Builder / QA / Approver workflow and PR loop | `docs/runbooks/governor_gated_github_pr_agent_loop.md` |
+| Context-governance and agent-boundary policy | `docs/implementation_context_governance.md`, if present |
+| Strategy, architecture, schema, model behavior, portfolio behavior, UI requirements | Locked SDR / EW / Engineering Specification sections |
+
+---
+
+## 5. Controlling project decisions reflected here
+
+This runbook follows these locked Phase 1 decisions and constraints:
 
 - VPS operating system: **Ubuntu 24.04 LTS**.
 - Runtime architecture: **Docker Engine + Docker Compose plugin**, not Docker Desktop.
@@ -44,9 +145,9 @@ This runbook follows the locked project decisions already approved for Phase 1:
   - Postgres container;
   - MLflow tracking container;
   - application container running Dash plus scheduled jobs.
-- Optional fourth container: **nginx**, only later if controlled UI exposure is needed.
+- Optional fourth container: **nginx**, only later if controlled UI exposure is explicitly approved.
 - Python version: **Python 3.12**.
-- Repository layout: `src/quant_research_platform/`.
+- Repository layout inside the codebase: `src/quant_research_platform/`.
 - Dependency discipline: `pyproject.toml` plus pinned `requirements.txt` for the Dockerfile.
 - Test framework: `pytest`.
 - Linter / formatter: `ruff`.
@@ -59,38 +160,36 @@ This runbook follows the locked project decisions already approved for Phase 1:
 
 ---
 
-## 3. What should be installed where
+## 6. What should be installed where
 
-### 3.1 Install on the VPS host
+### 6.1 Install on the VPS host
 
-Install these directly on Ubuntu:
+Install these directly on Ubuntu after the security baseline is complete:
 
 | Tool | Install on host? | Purpose |
 |---|---:|---|
-| Ubuntu system packages | Yes | OS updates, firewall, SSH, build basics |
 | Git | Yes | Clone repo, branch, commit, inspect diffs |
 | GitHub CLI `gh` | Yes | Authenticate to GitHub, open PRs, inspect PRs |
 | Docker Engine | Yes | Run all project services |
 | Docker Compose plugin | Yes | Orchestrate project services |
-| Python 3.12 host tooling | Yes | Lightweight local checks; container remains runtime source of truth |
+| Python 3.12 host tooling | Yes | Lightweight host checks; container remains runtime source of truth |
 | Node.js LTS + npm | Yes | Required for Claude Code, Codex CLI, and optional Cursor CLI |
-| Claude Code CLI | Yes, user-level | Primary Builder agent from SSH terminal |
-| OpenAI Codex CLI | Yes, user-level | Independent QA/reviewer agent from SSH terminal |
-| Cursor CLI | Optional, user-level | Small-scope builder / editor-adjacent agent if desired |
+| Claude Code CLI | Yes, user-level | Primary Builder tool when assigned by the project workflow |
+| OpenAI Codex CLI | Yes, user-level | Independent QA/reviewer tool when assigned by the project workflow |
+| Cursor CLI | Optional, user-level | Optional small-scope builder/editor-adjacent tool |
 | PostgreSQL client tools | Optional but recommended | `psql`, diagnostics, backup verification |
-| Fail2ban / UFW | Yes | Basic VPS hardening |
-| Host backup directory | Yes | Store rotated database dumps and MLflow artifact archives |
+| Host utility packages | Yes | `curl`, `jq`, `tmux`, `htop`, compression tools, etc. |
 
-### 3.2 Do not install directly on the VPS host
+### 6.2 Do not install directly on the VPS host
 
 Do **not** install these as host services for Phase 1:
 
 | Tool | Why not |
 |---|---|
 | PostgreSQL server | Postgres runs in the official Docker container. Host may have `postgresql-client` only. |
-| MLflow server | MLflow runs in its own container. Host may have MLflow only for ad-hoc client testing, but not as the service. |
+| MLflow server | MLflow runs only in its container. Do not install MLflow as a host service. |
 | Dash app runtime | Dash runs in the application container. |
-| Python project dependencies globally | Dependencies live in the app image and/or local venv, never system Python. |
+| Python project dependencies globally | Dependencies live in the app image and project manifests, not system Python. |
 | nginx | Omitted initially unless later approved for controlled UI exposure. |
 | Kubernetes | Out of scope for Phase 1. |
 | CI/CD runners | Out of scope for Phase 1. |
@@ -99,27 +198,26 @@ Do **not** install these as host services for Phase 1:
 
 ---
 
-## 4. Recommended version baseline
+## 7. Recommended version baseline
 
 | Component | Recommended baseline | Notes |
 |---|---|---|
 | OS | Ubuntu 24.04 LTS | Locked project decision. |
-| Python | Python 3.12.x | Locked project decision. Use `python:3.12-slim` family for the app container unless implementation chooses a more specific patch tag. |
-| PostgreSQL container | `postgres:17` or later approved fixed major tag | Use a fixed major tag. Avoid `postgres:latest` for production-like runs. PostgreSQL 17 is stable and supported; PostgreSQL 18 is available but should be chosen deliberately. |
-| Docker | Current Docker Engine from Docker apt repository | Install from Docker’s official apt repo, not Ubuntu’s old package if avoidable. |
-| Node.js | Node.js 22 LTS recommended | One Node LTS version is enough for Claude Code, Codex CLI, and Cursor CLI. Do not install multiple Node versions unless a tool requires it later. |
-| MLflow | Pin in project dependency manifest | MLflow server runs in container. Pin exact version during implementation. |
-| Dash | Pin in project dependency manifest | Dash app runs in application container. |
-| scikit-learn | Pin in project dependency manifest | Used by model layer. |
-| pandas / numpy | Pin in project dependency manifest | Used across ingestion, features, targets, backtests, and reporting. |
+| Python | Python 3.12.x | Locked project decision. Use the eventual project Dockerfile for runtime details once implementation files exist. |
+| PostgreSQL container | Fixed major tag, not `latest` | Exact major version should be chosen deliberately during implementation. |
+| Docker | Current Docker Engine from Docker apt repository | Install from Docker's official apt repo, not the legacy Ubuntu package if avoidable. |
+| Node.js | One supported LTS version; Node 22 LTS remains an acceptable baseline unless tool docs require newer | One Node version is enough for Claude Code, Codex CLI, and optional Cursor CLI. |
+| MLflow | Pin in project dependency manifest | MLflow server runs in container. Exact pin is implementation-owned. |
+| Dash | Pin in project dependency manifest | Dash app runs in application container. Exact pin is implementation-owned. |
+| scikit-learn / pandas / numpy | Pin in project dependency manifest | Used by model, data, and research layers. Exact pins are implementation-owned. |
 
-**Node answer:** No separate Node versions are needed now. Install one active LTS Node version. Node 22 LTS is a conservative baseline because Claude Code requires Node 18 or later and Codex installs through npm. If a later official tool requires Node 24+, update this runbook and the environment deliberately.
+**Node guidance:** Do not install multiple Node versions unless a tool later requires it. If Claude Code, Codex, or Cursor official requirements change, update this runbook deliberately.
 
 ---
 
-## 5. Official download / documentation links
+## 8. Official download / documentation links
 
-Use official sources first.
+Use official sources first. Re-check official install commands before running them on the VPS.
 
 ### Core VPS / platform
 
@@ -130,7 +228,7 @@ Use official sources first.
 - PostgreSQL official site: https://www.postgresql.org/
 - PostgreSQL Docker official image: https://hub.docker.com/_/postgres
 - Git: https://git-scm.com/download/linux
-- GitHub CLI: https://cli.github.com/
+- GitHub CLI Linux install docs: https://github.com/cli/cli/blob/trunk/docs/install_linux.md
 
 ### Python and Python project libraries
 
@@ -159,36 +257,39 @@ Use official sources first.
 
 - EODHD homepage: https://eodhd.com/
 - EODHD historical EOD API docs: https://eodhd.com/financial-apis/api-for-historical-data-and-volumes
-- EODHD Python library: https://github.com/EodHistoricalData/EODHD-APIs-Python-Financial-Library
+
+This runbook does not decide whether the provider adapter uses direct HTTP, a third-party package, or an official client. Provider-adapter implementation choices belong to the locked Engineering Specification and implementation tasks.
 
 ---
 
-## 6. Procedure overview
+## 9. Procedure overview
 
 Perform setup in this order:
 
-1. Create / verify the VPS.
-2. Harden SSH and firewall.
-3. Install base system packages.
+1. Complete `docs/runbooks/vps_security_baseline.md` end-to-end.
+2. Confirm the selected VPS is Ubuntu 24.04 LTS.
+3. Install post-security host utilities.
 4. Install Git and GitHub CLI.
 5. Install Docker Engine and Docker Compose plugin.
-6. Install Python 3.12 host tooling.
-7. Install Node.js LTS and npm.
-8. Install Claude Code, Codex CLI, and optional Cursor CLI.
-9. Create the project directory layout on the VPS.
-10. Clone the repo.
-11. Create host `.env` from `.env.example`.
-12. Build and start the Docker stack.
-13. Verify Postgres, MLflow, and app container health.
-14. Set up SSH tunnels for Dash and MLflow.
-15. Set up backup directories and backup smoke checks.
-16. Document what was installed.
+6. Configure Docker host hygiene, including daemon log rotation.
+7. Verify Docker using `sudo docker ...` commands.
+8. Install Python 3.12 host tooling.
+9. Install Node.js LTS and npm.
+10. Install Claude Code, Codex CLI, and optional Cursor CLI.
+11. Use the `/srv/quant/<lane>/quant-research-platform/` lane layout defined by `vps_development_environment.md`.
+12. Clone the repo into the appropriate lane working tree.
+13. Create host `.env` from `.env.example` in the lane working tree.
+14. Build and start the Docker stack when implementation files exist.
+15. Verify Postgres, MLflow, and app container health.
+16. Use SSH tunnels for Dash and MLflow.
+17. Confirm lane-aware backup paths and off-host backup requirements.
+18. Document what was installed.
 
 ---
 
-## 7. VPS operating system setup
+## 10. VPS operating system checks and host utilities
 
-### 7.1 Confirm OS version
+### 10.1 Confirm OS version
 
 ```bash
 lsb_release -a
@@ -197,7 +298,9 @@ uname -a
 
 Expected: Ubuntu 24.04 LTS.
 
-### 7.2 Update the system
+### 10.2 Update non-security host packages
+
+Security-update policy and unattended upgrades are owned by `vps_security_baseline.md`. After that baseline is complete, it is still acceptable to update packages before installing tooling:
 
 ```bash
 sudo apt update
@@ -205,7 +308,9 @@ sudo apt upgrade -y
 sudo apt autoremove -y
 ```
 
-### 7.3 Install basic utilities
+If the system reports that a reboot is required, reboot during a quiet window and reconnect as `deploy`.
+
+### 10.3 Install host utility packages
 
 ```bash
 sudo apt install -y \
@@ -228,105 +333,13 @@ sudo apt install -y \
   pkg-config
 ```
 
-### 7.4 Enable automatic security updates
-
-```bash
-sudo apt install -y unattended-upgrades
-sudo dpkg-reconfigure --priority=low unattended-upgrades
-```
-
-Verify:
-
-```bash
-systemctl status unattended-upgrades --no-pager
-```
+Do not install a host PostgreSQL server.
 
 ---
 
-## 8. Basic VPS security
+## 11. Git and GitHub CLI setup
 
-### 8.1 Create a non-root deploy user if needed
-
-If the VPS only gives you root, create a normal user:
-
-```bash
-sudo adduser deploy
-sudo usermod -aG sudo deploy
-```
-
-Add your SSH public key:
-
-```bash
-sudo mkdir -p /home/deploy/.ssh
-sudo nano /home/deploy/.ssh/authorized_keys
-sudo chown -R deploy:deploy /home/deploy/.ssh
-sudo chmod 700 /home/deploy/.ssh
-sudo chmod 600 /home/deploy/.ssh/authorized_keys
-```
-
-Then log in as `deploy` before continuing.
-
-### 8.2 Configure UFW firewall
-
-Allow SSH first:
-
-```bash
-sudo ufw allow OpenSSH
-sudo ufw enable
-sudo ufw status verbose
-```
-
-For Phase 1, do **not** open Dash, MLflow, or Postgres ports to the public internet. Use SSH tunnels instead.
-
-Do not run these unless later approved:
-
-```bash
-# Do not run by default:
-# sudo ufw allow 8050/tcp
-# sudo ufw allow 5000/tcp
-# sudo ufw allow 5432/tcp
-```
-
-### 8.3 Install Fail2ban
-
-```bash
-sudo apt install -y fail2ban
-sudo systemctl enable fail2ban
-sudo systemctl start fail2ban
-sudo fail2ban-client status
-```
-
-Optional SSH jail override:
-
-```bash
-sudo nano /etc/fail2ban/jail.d/sshd.local
-```
-
-Suggested starter content:
-
-```ini
-[sshd]
-enabled = true
-port = ssh
-filter = sshd
-logpath = /var/log/auth.log
-maxretry = 5
-bantime = 1h
-findtime = 10m
-```
-
-Restart:
-
-```bash
-sudo systemctl restart fail2ban
-sudo fail2ban-client status sshd
-```
-
----
-
-## 9. Git and GitHub CLI setup
-
-### 9.1 Install Git
+### 11.1 Install Git
 
 ```bash
 sudo apt install -y git
@@ -335,39 +348,36 @@ sudo apt install -y git
 Configure identity:
 
 ```bash
-git config --global user.name "Jeremy Dempsey"
-git config --global user.email "YOUR_GITHUB_EMAIL_HERE"
+git config --global user.name "<your-name>"
+git config --global user.email "<your-github-email>"
 git config --global init.defaultBranch main
 ```
 
-### 9.2 Install GitHub CLI
+### 11.2 Install GitHub CLI
 
-Use the official GitHub CLI installation instructions for Ubuntu if they change. Current pattern:
+Install GitHub CLI using the current official Linux instructions:
 
-```bash
-(type -p wget >/dev/null || sudo apt install wget -y) \
-  && sudo mkdir -p -m 755 /etc/apt/keyrings \
-  && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-  | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
-  && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-  | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-  && sudo apt update \
-  && sudo apt install gh -y
+```text
+https://github.com/cli/cli/blob/trunk/docs/install_linux.md
 ```
 
-Authenticate:
+After installation, authenticate `gh` for the Linux user that will use it. For dev-lane work that creates or reviews PRs from `/srv/quant/dev/quant-research-platform`, this normally means `quantdev`, not `deploy`, because GitHub CLI authentication is stored under the current user's home directory.
+
+Example for the dev lane:
 
 ```bash
+sudo -iu quantdev
 gh auth login
 gh auth status
 ```
 
+Do not paste GitHub tokens into docs, prompts, or shell transcripts.
+
 ---
 
-## 10. Docker Engine and Docker Compose setup
+## 12. Docker Engine and Docker Compose setup
 
-### 10.1 Remove conflicting packages if present
+### 12.1 Remove conflicting packages if present
 
 ```bash
 for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do
@@ -375,7 +385,15 @@ for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker c
 done
 ```
 
-### 10.2 Install Docker from Docker’s official apt repository
+### 12.2 Install Docker from Docker's official apt repository
+
+Check Docker's official Ubuntu instructions before running these commands:
+
+```text
+https://docs.docker.com/engine/install/ubuntu/
+```
+
+Current pattern:
 
 ```bash
 sudo install -m 0755 -d /etc/apt/keyrings
@@ -391,21 +409,28 @@ sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
-### 10.3 Allow non-root Docker usage
+### 12.3 Docker access default: use sudo
+
+Initial VPS setup uses:
 
 ```bash
-sudo usermod -aG docker "$USER"
+sudo docker ...
+sudo docker compose ...
 ```
 
-Log out and back in, then verify:
+Do not add `deploy` or the current user to the `docker` group by default. Docker group membership is root-equivalent and may only be granted later as an explicit lane-operator exception documented in `docs/runbooks/vps_development_environment.md`.
+
+Verify with `sudo`:
 
 ```bash
-docker --version
-docker compose version
-docker run hello-world
+sudo docker --version
+sudo docker compose version
+sudo docker run hello-world
 ```
 
-### 10.4 Docker daemon log rotation
+### 12.4 Docker host hygiene: daemon log rotation
+
+`vps_security_baseline.md` owns Docker exposure rules and security hardening. This setup runbook owns basic Docker installation and host hygiene such as log rotation.
 
 Create or edit:
 
@@ -432,13 +457,39 @@ sudo systemctl restart docker
 sudo systemctl status docker --no-pager
 ```
 
+### 12.5 Port-binding standard
+
+Every container port published to the host must bind to `127.0.0.1`, not `0.0.0.0`.
+
+Important: UFW does not reliably filter Docker-published ports. The Docker Compose bind address is the primary enforcement point for container service exposure.
+
+Rules:
+
+1. Published host ports bind to `127.0.0.1` only.
+2. Internal container-to-container traffic should use Docker internal networking or `expose`.
+3. `0.0.0.0` bindings are not allowed in Phase 1 unless explicitly approved as a deployment-exposure change.
+4. Public IPv6 bindings are not allowed in Phase 1 unless explicitly approved as a deployment-exposure change.
+5. See `docs/runbooks/vps_security_baseline.md` for safe / unsafe examples and verification commands.
+
+Verification command:
+
+```bash
+sudo ss -tulpen | grep -vE '127\.0\.0\.1|\[::1\]'
+```
+
+Passing condition:
+
+```text
+Only sshd should appear on non-loopback addresses unless a future deployment-exposure change is explicitly approved.
+```
+
 ---
 
-## 11. Python 3.12 host tooling
+## 13. Python 3.12 host tooling
 
 The application runtime belongs in Docker. The host Python install is for lightweight checks only.
 
-### 11.1 Install Python 3.12 support packages
+### 13.1 Install Python support packages
 
 Ubuntu 24.04 includes Python 3.12 by default. Install venv/pip support:
 
@@ -449,9 +500,9 @@ python3 --version
 
 Expected major/minor: `Python 3.12.x`.
 
-### 11.2 Optional host virtual environment
+### 13.2 Optional host virtual environment
 
-Use this only for local helper tools, not as the production runtime:
+Use this only for local helper tools, not as the deployed runtime:
 
 ```bash
 mkdir -p ~/venvs
@@ -460,7 +511,7 @@ source ~/venvs/quant-tools/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 ```
 
-Optional host-only tools:
+Optional host-only helper tools:
 
 ```bash
 python -m pip install pytest ruff
@@ -468,13 +519,21 @@ python -m pip install pytest ruff
 
 Do not install the full project globally with `sudo pip`.
 
+Open question OQ-VPS-SETUP-03 tracks whether this host venv convention should remain in the setup runbook or move to a separate local-development procedure.
+
 ---
 
-## 12. Node.js and npm setup
+## 14. Node.js and npm setup
 
 Node is required for the AI CLI tools. The application itself is Python/Dash and does not require Node at runtime.
 
-### 12.1 Recommended install: Node.js 22 LTS via NodeSource
+**User-context note:** Node itself is installed system-wide by the admin user, but npm global prefix configuration and AI CLI installs are per Linux user. For normal development-lane work, switch to `quantdev` before running the npm-global and AI CLI commands in this section and in Sections 15-17.
+
+### 14.1 Install one Node.js LTS version
+
+Recommended baseline: Node.js 22 LTS unless official tool requirements change.
+
+Example using NodeSource:
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
@@ -483,11 +542,17 @@ node --version
 npm --version
 ```
 
-### 12.2 npm global package directory without sudo
+If official Claude Code, Codex, or Cursor requirements later require a newer Node LTS, update this runbook deliberately.
 
-Avoid global npm installs that require `sudo`.
+### 14.2 npm global package directory without sudo
+
+Avoid global npm installs that require `sudo`. npm global package configuration is **per Linux user**. Configure it for the user that will run the AI CLI tools. For normal development-lane work, that is usually `quantdev`, not `deploy`.
+
+Example for the dev lane:
 
 ```bash
+ssh deploy@<vps-host>
+sudo -iu quantdev
 mkdir -p ~/.npm-global
 npm config set prefix ~/.npm-global
 ```
@@ -509,11 +574,13 @@ Expected: `/home/<user>/.npm-global`.
 
 ---
 
-## 13. Claude Code setup
+## 15. Claude Code setup
 
-Claude Code is the primary Builder tool for coding tasks in this project workflow.
+Claude Code is the primary Builder tool when assigned by the project workflow.
 
-### 13.1 Install
+### 15.1 Install
+
+Run as the Linux user that will use Claude Code, normally the dev-lane user `quantdev`:
 
 ```bash
 npm install -g @anthropic-ai/claude-code
@@ -525,7 +592,7 @@ Verify:
 claude --version
 ```
 
-### 13.2 Authenticate
+### 15.2 Authenticate
 
 Run:
 
@@ -535,28 +602,29 @@ claude
 
 Follow the browser or terminal authentication flow provided by Claude Code.
 
-For headless/API-key usage, follow Anthropic’s official docs. Do **not** paste API keys into chat, docs, code, or shell history. Use environment variables only if needed.
+For headless/API-key usage, follow Anthropic's official docs. Do not paste API keys into chat, docs, code, shell history, or Git.
 
-### 13.3 Project usage rule
+### 15.3 Project operating rules
 
-Run Claude Code only from a clean Git working tree or a dedicated feature branch:
+This section covers installation only. Project operating rules for Claude Code are governed by:
 
-```bash
-cd ~/quant/quant-research-platform
-git status
-git checkout -b feature/<short-task-name>
-claude
+```text
+
+docs/runbooks/governor_gated_github_pr_agent_loop.md
+docs/implementation_context_governance.md, if present
 ```
 
-Claude Code should not work directly on `main`.
+Minimum reminder: run agents from a feature branch on a clean working tree. Agents do not approve, merge, expose services publicly, edit real secrets casually, or bypass Jeremy's approval authority.
 
 ---
 
-## 14. OpenAI Codex CLI setup
+## 16. OpenAI Codex CLI setup
 
-Codex is the independent QA/reviewer tool in the project workflow. It can also be used for small implementation tasks when explicitly assigned, but it should not self-certify its own work.
+Codex is the independent QA/reviewer tool when assigned by the project workflow. It can also be used for small implementation tasks only when explicitly assigned.
 
-### 14.1 Install
+### 16.1 Install
+
+Run as the Linux user that will use Codex, normally the dev-lane user `quantdev`:
 
 ```bash
 npm install -g @openai/codex
@@ -568,7 +636,7 @@ Verify:
 codex --version
 ```
 
-### 14.2 Authenticate
+### 16.2 Authenticate
 
 ```bash
 codex
@@ -576,17 +644,25 @@ codex
 
 Follow the sign-in flow. Use ChatGPT account authentication unless you deliberately choose API-key usage.
 
-### 14.3 Project usage rule
+### 16.3 Project operating rules
 
-Use Codex on the artifact, diff, test output, and controlling docs. Do not ask Codex to approve changes it authored unless a separate QA pass is performed by another reviewer.
+This section covers installation only. Codex operating rules are governed by:
+
+```text
+
+docs/runbooks/governor_gated_github_pr_agent_loop.md
+docs/implementation_context_governance.md, if present
+```
+
+Minimum reminder: run agents from a feature branch on a clean working tree. Agents do not approve, merge, expose services publicly, edit real secrets casually, or bypass Jeremy's approval authority.
 
 ---
 
-## 15. Cursor setup
+## 17. Cursor setup
 
-Cursor should play a smaller-scale builder/editor role, not replace the project’s Builder → QA → Approver flow.
+Cursor is optional. It may be useful as a smaller-scale editor/builder aid, but it does not replace the approved Builder → QA → Approver process.
 
-### 15.1 Recommended use
+### 17.1 Recommended use
 
 Best default:
 
@@ -595,69 +671,112 @@ Best default:
 3. Push changes through the same Git branch / PR / QA process.
 4. Use SSH into the VPS for terminal-based Claude Code and Codex when needed.
 
-### 15.2 Optional Cursor CLI on VPS
+### 17.2 Optional Cursor CLI on VPS
 
-Install Cursor CLI only if you want terminal agent support on the VPS:
+Install Cursor CLI only if you want terminal agent support on the VPS. Run it as the Linux user that will use Cursor CLI, normally `quantdev` for dev-lane work:
 
 ```bash
 curl https://cursor.com/install -fsS | bash
 ```
 
-Then restart the shell and verify based on Cursor’s current CLI docs.
+Then restart the shell and verify based on Cursor's current CLI docs.
 
 Cursor tooling should not run inside the application container and should not be given production secrets beyond what the normal user shell already has access to.
 
+### 17.3 Project operating rules
+
+Cursor operating rules are governed by:
+
+```text
+
+docs/runbooks/governor_gated_github_pr_agent_loop.md
+docs/implementation_context_governance.md, if present
+```
+
+Minimum reminder: run agents from a feature branch on a clean working tree. Agents do not approve, merge, expose services publicly, edit real secrets casually, or bypass Jeremy's approval authority.
+
 ---
 
-## 16. Project directory layout on VPS
+## 18. VPS lane layout and user model
 
-Suggested user-level layout:
+`docs/runbooks/vps_development_environment.md` owns the VPS lane layout, lane users, Compose project names, and lane-specific port conventions.
 
-```bash
-mkdir -p ~/quant
-cd ~/quant
+Use the lane-specific working tree defined there:
+
+```text
+/srv/quant/dev/quant-research-platform
+/srv/quant/stage/quant-research-platform
+/srv/quant/prod/quant-research-platform
 ```
 
-Clone repo:
+Do not maintain a parallel home-directory clone on the VPS.
+
+User model:
+
+| User | Role |
+|---|---|
+| `deploy` | SSH/admin user created by the security baseline |
+| `quantdev` | development lane user |
+| `quantstage` | optional staging lane user |
+| `quantprod` | production lane user |
+
+Operator pattern:
 
 ```bash
+ssh deploy@<vps-host>
+sudo -iu quantdev
+# or
+sudo -iu quantstage
+# or
+sudo -iu quantprod
+```
+
+If you use a personalized admin username instead of `deploy`, document it as a replacement for `deploy`; do not mix both names in the same procedure.
+
+Lane-user creation and lane permissions are governed by `vps_development_environment.md`. This setup runbook does not change that model.
+
+---
+
+## 19. Clone the repository into a lane working tree
+
+Lane users (`quantdev`, `quantstage`, `quantprod`) must be created per `docs/runbooks/vps_development_environment.md` before this section is run. This runbook uses those exact names because the development-environment runbook defines them as the lane users.
+
+Example for the dev lane:
+
+```bash
+ssh deploy@<vps-host>
+sudo -iu quantdev
+cd /srv/quant/dev
 git clone https://github.com/prodempsey/quant-research-platform.git
-cd quant-research-platform
-```
-
-Confirm:
-
-```bash
+cd /srv/quant/dev/quant-research-platform
 git remote -v
 git status
 ```
 
-Optional `/srv` layout for later production hardening:
+Example for production should follow the promotion flow in `vps_development_environment.md`, not ad-hoc branch work.
 
-```bash
-sudo mkdir -p /srv/quant
-sudo chown -R "$USER":"$USER" /srv/quant
-```
-
-Use only one canonical working copy per environment to avoid confusion.
+Do not clone a second working copy under `~/quant` on the VPS.
 
 ---
 
-## 17. Host `.env` setup
+## 20. Host `.env` setup
 
-### 17.1 Create `.env`
+### 20.1 Create `.env` in the lane working tree
 
-From the repo root:
+From the lane repo root:
 
 ```bash
+cd /srv/quant/dev/quant-research-platform
 cp .env.example .env
 chmod 600 .env
 nano .env
 ```
 
-### 17.2 Required variables from the data-layer spec
+For stage/prod, use the corresponding lane path and lane user. Do not copy `.env` files between lanes.
 
-At minimum, the file should eventually include:
+### 20.2 Environment variable illustration
+
+`docs/engineering_spec/02_data_layer.md` defines the required data-layer environment-variable names, and `.env.example` is the implementation-facing template once it exists. Variable names and values shown below are illustrative in this runbook; if this block differs from `docs/engineering_spec/02_data_layer.md` or `.env.example`, the locked spec and `.env.example` control.
 
 ```bash
 # Application database
@@ -684,29 +803,34 @@ EODHD_API_BASE_URL=https://eodhd.com/api
 
 Do not commit `.env`.
 
-Verify:
+Verify without printing secrets:
 
 ```bash
 git status --ignored --short | grep .env || true
+ls -l .env
 ```
 
-Expected: `.env` should be ignored or absent from regular `git status` output.
+Expected `.env` permission pattern:
 
-### 17.3 Credential handling rules
+```text
+-rw-------
+```
+
+### 20.3 Credential handling rules
 
 - Do not paste real credentials into prompts.
 - Do not save real credentials in markdown files.
 - Do not put credentials in `config/*.yaml`.
 - Do not bake credentials into Docker images.
-- Rotate credentials by editing host `.env` and restarting affected containers.
+- Rotate credentials by editing the lane's host `.env` and restarting affected containers.
 
 ---
 
-## 18. PostgreSQL setup
+## 21. PostgreSQL setup
 
-### 18.1 Host package
+### 21.1 Host package
 
-Install the client only:
+Install the client only if not already installed:
 
 ```bash
 sudo apt install -y postgresql-client
@@ -715,45 +839,47 @@ psql --version
 
 Do not install or enable a host PostgreSQL server for Phase 1.
 
-### 18.2 Container role
+### 21.2 Container role
 
 Postgres runs as a Docker Compose service using the official `postgres` image.
 
 Expected project behavior:
 
-- one Postgres container;
-- one named volume: `pgdata`;
+- one Postgres container per lane Compose stack;
+- named volume for Postgres data, namespaced by Compose project name;
 - two logical databases:
   - application database;
   - MLflow metadata database;
 - bootstrap SQL under `scripts/postgres-init/` mounted to `/docker-entrypoint-initdb.d/`;
 - application migrations under `migrations/` applied separately from database/role bootstrap.
 
-### 18.3 Verify after Compose is available
+### 21.3 Verify after Compose is available
+
+From the lane repo root:
 
 ```bash
-docker compose ps
-docker compose exec postgres pg_isready -U "$APP_DB_USER" -d "$APP_DB_NAME"
+sudo docker compose ps
+sudo docker compose exec postgres pg_isready -U "$APP_DB_USER" -d "$APP_DB_NAME"
 ```
 
 If environment variables are not available in your shell, read service names and usernames from `.env` without printing passwords.
 
 ---
 
-## 19. MLflow setup
+## 22. MLflow setup
 
-### 19.1 Intended Phase 1 architecture
+### 22.1 Intended Phase 1 architecture
 
 MLflow runs as a dedicated container, not as a host service.
 
 Expected behavior:
 
 - MLflow metadata database is in the same Postgres container but isolated from the app database.
-- MLflow artifacts are stored in the `mlflow-artifacts` Docker named volume.
+- MLflow artifacts are stored in the `mlflow-artifacts` Docker named volume, namespaced by Compose project name.
 - Application container writes MLflow run metadata through `MLFLOW_TRACKING_URI`.
 - MLflow web UI is internal-only and reached by SSH tunnel.
 
-### 19.2 Typical MLflow server command inside the MLflow container
+### 22.2 Typical MLflow server command inside the MLflow container
 
 The implementation may vary, but the expected shape is:
 
@@ -765,19 +891,21 @@ mlflow server \
   --port 5000
 ```
 
-The exact command belongs in `docker-compose.yml` or the MLflow service image definition, not as a manually run host command.
+Do not run this command directly on the host shell; credentials may appear in process listings. The actual command belongs in `docker-compose.yml`, the MLflow service image definition, or container configuration.
 
-### 19.3 Verify MLflow after Compose is available
+The container may listen on `0.0.0.0` **inside the Docker network**, but any host-published port must still bind to `127.0.0.1` only.
+
+### 22.3 Verify MLflow after Compose is available
 
 ```bash
-docker compose ps mlflow
-docker compose logs --tail=100 mlflow
+sudo docker compose ps mlflow
+sudo docker compose logs --tail=100 mlflow
 ```
 
 From the app container:
 
 ```bash
-docker compose exec app python - <<'PY'
+sudo docker compose exec app python - <<'PY'
 import os
 print(os.environ.get("MLFLOW_TRACKING_URI"))
 PY
@@ -787,9 +915,9 @@ Do not expose MLflow publicly.
 
 ---
 
-## 20. Application container setup
+## 23. Application container setup
 
-### 20.1 Expected container responsibilities
+### 23.1 Expected container responsibilities
 
 The application container is the only container that imports project Python code. It should eventually:
 
@@ -801,7 +929,7 @@ The application container is the only container that imports project Python code
 - write application state to Postgres;
 - write model run tracking to MLflow.
 
-### 20.2 Python dependencies belong in project manifests
+### 23.2 Python dependencies belong in project manifests
 
 Use:
 
@@ -818,65 +946,50 @@ Avoid:
 
 ---
 
-## 21. Python library inventory
+## 24. Python dependency categories
 
-This is the recommended Phase 1 dependency inventory. Exact pins should be chosen during implementation and committed through `pyproject.toml` and `requirements.txt`.
+The exact package set and pins are owned by `pyproject.toml`, `requirements.txt`, and the locked Engineering Specification sections. This runbook only lists expected dependency categories for setup awareness.
 
-### 21.1 Runtime libraries likely needed
+### 24.1 Runtime dependency categories likely needed
 
-| Package | Purpose |
+| Category | Examples of purpose |
 |---|---|
-| `pandas` | Dataframes, ETL, feature/target/backtest calculations |
-| `numpy` | Numeric operations |
-| `scipy` | Scientific/statistical support used by ML stack |
-| `scikit-learn` | Baseline regression/classification models and calibration |
-| `mlflow` | Experiment tracking and model registry integration |
-| `SQLAlchemy` | Database access layer |
-| `psycopg[binary]` or `psycopg` | PostgreSQL driver |
-| `pydantic` v2 | Provider DTOs and config/data validation |
-| `PyYAML` or `ruamel.yaml` | YAML config parsing |
-| `requests` or `httpx` | EODHD API calls inside provider adapter |
-| `tenacity` | Retry/backoff for provider rate limits and transient failures |
-| `python-dateutil` | Date handling support |
-| `pandas-market-calendars` or `exchange-calendars` | U.S. trading calendar support; choose deliberately during implementation |
-| `plotly` | Dash charting |
-| `dash` | Operator UI |
-| `dash-bootstrap-components` | Dash UI layout/styling convenience |
-| `gunicorn` | Production-ish WSGI serving if selected for Dash |
-| `click` or `typer` | Thin command-line entry points |
-| `structlog` or standard `logging` only | Structured logging if selected; standard logging is enough initially |
-| `python-dotenv` | Local development only; not a deployed runtime dependency |
+| Dataframes / numeric computation | ETL, feature/target/backtest calculations |
+| Scientific / ML stack | Baseline regression/classification models and calibration |
+| Experiment tracking | MLflow client integration |
+| Database access | SQLAlchemy-style access and PostgreSQL driver |
+| Validation / DTOs | Provider DTOs and config/data validation |
+| YAML config parsing | Read approved `config/*.yaml` files |
+| HTTP client | Provider adapter calls inside provider layer |
+| Retry/backoff | Provider rate limits and transient failures |
+| Date / market calendar support | Trading-day logic |
+| Dash / Plotly UI | Operator UI |
+| CLI entry points | Thin command wrappers |
+| Logging | Standard or structured logging, as selected by implementation |
 
-### 21.2 Dev/test libraries likely needed
+### 24.2 Dev/test dependency categories likely needed
 
-| Package | Purpose |
+| Category | Examples of purpose |
 |---|---|
-| `pytest` | Test runner |
-| `pytest-cov` | Coverage reporting |
-| `ruff` | Linting and formatting |
-| `mypy` | Optional static typing check; add only if wanted |
-| `types-PyYAML` / other stubs | Optional type stubs if mypy is used |
-| `responses` or `respx` | Mock external HTTP calls depending on `requests` vs `httpx` |
-| `freezegun` | Optional date/time tests |
+| Test runner | Unit and integration tests |
+| Coverage | Coverage reporting |
+| Linting / formatting | Ruff or approved equivalent |
+| Type checking | Optional static type checks if adopted |
+| HTTP mocks | Provider API tests |
+| Time controls | Date/time boundary tests |
 
-### 21.3 Provider-specific library decision
-
-EODHD has an official Python library, but the project’s provider abstraction means the platform should not become coupled to that package outside `providers/eodhd/`.
-
-Recommended implementation stance:
-
-- prefer simple HTTP calls with `requests` or `httpx` inside `providers/eodhd/` first;
-- use the official EODHD Python package only if it materially reduces risk or maintenance;
-- never let `features/`, `targets/`, `models/`, `backtest/`, `portfolio/`, `paper/`, `order_intent/`, or `ui/` import EODHD-specific packages.
+This runbook does not decide among competing packages. Package selection belongs to implementation under the approved specs.
 
 ---
 
-## 22. Docker Compose startup procedure
+## 25. Docker Compose startup procedure
 
-After the repo contains the approved `Dockerfile`, `docker-compose.yml`, `.env.example`, and required bootstrap files:
+After the repo contains the approved `Dockerfile`, `docker-compose.yml`, `.env.example`, and required bootstrap files, work from the appropriate lane repo root.
+
+Example dev lane:
 
 ```bash
-cd ~/quant/quant-research-platform
+cd /srv/quant/dev/quant-research-platform
 cp .env.example .env
 chmod 600 .env
 nano .env
@@ -885,90 +998,118 @@ nano .env
 Build:
 
 ```bash
-docker compose build --no-cache
+sudo docker compose build --no-cache
 ```
 
 Start:
 
 ```bash
-docker compose up -d
+sudo docker compose up -d
 ```
 
 Check services:
 
 ```bash
-docker compose ps
-docker compose logs --tail=100 postgres
-docker compose logs --tail=100 mlflow
-docker compose logs --tail=100 app
+sudo docker compose ps
+sudo docker compose logs --tail=100 postgres
+sudo docker compose logs --tail=100 mlflow
+sudo docker compose logs --tail=100 app
+```
+
+Verify non-loopback listeners:
+
+```bash
+sudo ss -tulpen | grep -vE '127\.0\.0\.1|\[::1\]'
+```
+
+Passing condition:
+
+```text
+Only sshd should appear on non-loopback addresses unless a future deployment-exposure change is explicitly approved.
 ```
 
 Run tests inside the app container when code exists:
 
 ```bash
-docker compose exec app pytest
+sudo docker compose exec app pytest
 ```
 
 Run lint/format checks when code exists:
 
 ```bash
-docker compose exec app ruff check .
-docker compose exec app ruff format --check .
+sudo docker compose exec app ruff check .
+sudo docker compose exec app ruff format --check .
 ```
 
 ---
 
-## 23. SSH tunnels for Dash and MLflow
+## 26. SSH tunnels for Dash and MLflow
 
 Do not expose Dash or MLflow publicly in Phase 1.
 
-From your local machine:
+Lane-specific port conventions are owned by `docs/runbooks/vps_development_environment.md`.
+
+Example dev lane Dash tunnel:
 
 ```bash
-ssh -L 8050:localhost:8050 -L 5000:localhost:5000 deploy@YOUR_VPS_IP
+ssh -N -L 8051:127.0.0.1:8051 deploy@<vps-host>
 ```
 
-Then browse locally:
+Then browse locally to:
 
-- Dash: http://localhost:8050
-- MLflow: http://localhost:5000
+```text
+http://127.0.0.1:8051
+```
 
-If the containers bind only inside Docker, the tunnel target may need to point to the host-mapped localhost ports defined in `docker-compose.yml`. Keep those ports bound to `127.0.0.1`, not `0.0.0.0`, unless public exposure is later approved.
+Example production lane Dash tunnel:
+
+```bash
+ssh -N -L 8050:127.0.0.1:8050 deploy@<vps-host>
+```
+
+Then browse locally to:
+
+```text
+http://127.0.0.1:8050
+```
+
+MLflow follows the same loopback-only tunnel pattern using the lane's configured localhost port. Do not invent or expose MLflow public ports in this setup runbook.
 
 ---
 
-## 24. Backup setup
+## 27. Backup setup pointer
 
-### 24.1 Host directories
+Backup root is lane-aware and governed by `docs/runbooks/vps_development_environment.md`:
 
-```bash
-mkdir -p ~/quant/backups/postgres
-mkdir -p ~/quant/backups/mlflow-artifacts
-chmod 700 ~/quant/backups
+```text
+/srv/quant/backups/dev/
+/srv/quant/backups/stage/
+/srv/quant/backups/prod/
 ```
 
-### 24.2 Expected scripts
+The off-host backup requirement is owned by `docs/runbooks/vps_security_baseline.md`.
 
-The repo should eventually contain:
+This setup runbook does not define the final backup/restore procedure. Suggested future runbook:
 
-- `scripts/backup.sh` — host-side backup wrapper that runs `pg_dump` against the Postgres container and rotates old dumps.
-- `scripts/restore.sh` — controlled restore procedure.
+```text
 
-### 24.3 Manual backup smoke pattern
-
-Example shape only; final script should own exact names:
-
-```bash
-docker compose exec -T postgres pg_dump -U "$APP_DB_USER" "$APP_DB_NAME" > ~/quant/backups/postgres/app_$(date +%Y%m%d_%H%M%S).sql
+docs/runbooks/vps_backup_restore.md
 ```
 
-For MLflow artifacts, archive the Docker named volume or mount path according to the final `docker-compose.yml`.
+At setup time, verify that the lane backup directory exists and has restrictive permissions. Example for dev:
+
+```bash
+sudo mkdir -p /srv/quant/backups/dev
+sudo chmod 700 /srv/quant/backups/dev
+```
+
+Do not treat on-host backup directories as sufficient by themselves. Off-host backups are required before the platform stores meaningful research data, MLflow artifacts, or secrets.
 
 ---
 
-## 25. Health-check procedure
+## 28. Health-check procedure
 
-### 25.1 Host health
+### 28.1 Host health
 
 ```bash
 df -h
@@ -977,93 +1118,71 @@ uptime
 sudo systemctl status docker --no-pager
 ```
 
-### 25.2 Container health
+### 28.2 Container health
+
+From the lane repo root:
 
 ```bash
-docker compose ps
-docker stats --no-stream
+sudo docker compose ps
+sudo docker stats --no-stream
 ```
 
-### 25.3 App health
+### 28.3 App health
 
 ```bash
-docker compose logs --tail=100 app
+sudo docker compose logs --tail=100 app
 ```
 
-Expected:
+Expected once implementation exists:
 
 - Dash process is running;
 - cron process is running;
 - scheduled-job failures are visible;
 - app health check does not pass if cron is dead.
 
-### 25.4 Database health
+### 28.4 Database health
 
 ```bash
-docker compose exec postgres pg_isready
+sudo docker compose exec postgres pg_isready
 ```
 
-### 25.5 MLflow health
+### 28.5 MLflow health
 
 ```bash
-docker compose logs --tail=100 mlflow
+sudo docker compose logs --tail=100 mlflow
 ```
 
 If MLflow is reachable by tunnel:
 
 ```bash
-curl -I http://localhost:5000
+curl -I http://127.0.0.1:<lane-mlflow-local-port>
 ```
+
+Use the lane's configured localhost port from `vps_development_environment.md` or the final Compose configuration.
 
 ---
 
-## 26. AI agent operating guardrails on the VPS
+## 29. AI agent governance on the VPS
 
-### 26.1 Branch discipline
+Detailed agent operating rules are governed by:
 
-Before using Claude Code, Codex, or Cursor:
+```text
 
-```bash
-git status
-git checkout main
-git pull
-git checkout -b feature/<task-name>
+docs/runbooks/governor_gated_github_pr_agent_loop.md
+docs/implementation_context_governance.md, if present
 ```
 
-After work:
+This setup runbook only records the cross-cutting reminder:
 
-```bash
-git status
-git diff
-git diff --stat
-```
-
-### 26.2 Agent responsibility split
-
-| Tool | Role |
-|---|---|
-| Claude Code | Primary Builder for implementation tasks |
-| Codex | Independent QA/reviewer; may do small tasks only when assigned |
-| ChatGPT | Architecture/spec/QA guidance and final review support |
-| Cursor | Smaller-scale builder/editor, useful for targeted changes and local review |
-| Jeremy | Approver; final merge and strategy authority |
-
-### 26.3 Never give agents unrestricted production authority
-
-Agents must not:
-
-- edit `.env` with real credentials unless you explicitly direct and inspect the result;
-- commit secrets;
-- modify main directly;
-- expose Dash, MLflow, or Postgres publicly;
-- add broker SDKs;
-- create live trading code paths;
-- change strategy-affecting YAML without approval;
-- self-certify their own work.
+- Run agents from a feature branch on a clean working tree.
+- Agents do not approve or merge their own work.
+- Agents do not expose services publicly.
+- Agents do not edit real secrets casually.
+- Agents do not bypass Jeremy's approval authority.
 
 ---
 
-## 27. Things not needed right now
+## 30. Things not needed right now
 
 Do not set these up unless a later approved change requires them:
 
@@ -1080,66 +1199,66 @@ Do not set these up unless a later approved change requires them:
 - broker APIs / SDKs;
 - AI Maestro;
 - multiple Node versions;
-- production secrets in agent tooling.
+- production secrets in agent tooling;
+- VPN / Tailscale / WireGuard requirement;
+- SIEM / Wazuh / CrowdSec.
 
 ---
 
-## 28. Final VPS readiness checklist
+## 31. Final VPS setup readiness checklist
 
 The VPS is ready for implementation work when all are true:
 
+- [ ] `docs/runbooks/vps_security_baseline.md` completed and signed off.
 - [ ] Ubuntu 24.04 LTS confirmed.
-- [ ] Non-root sudo user configured.
-- [ ] SSH key login works.
-- [ ] UFW enabled with SSH only.
-- [ ] Fail2ban enabled.
-- [ ] System packages updated.
-- [ ] Git installed and configured.
-- [ ] GitHub CLI installed and authenticated.
+- [ ] Git installed and configured with placeholder-correct user identity.
+- [ ] GitHub CLI installed from official docs and authenticated for the lane user that will use it.
 - [ ] Docker Engine installed from official Docker apt repository.
 - [ ] Docker Compose plugin installed.
-- [ ] Current user can run Docker without sudo.
-- [ ] Docker log rotation configured.
+- [ ] Docker commands verified with `sudo docker ...`.
+- [ ] `deploy` or current admin user has **not** been casually added to the Docker group.
+- [ ] Docker daemon log rotation configured.
+- [ ] Docker port-binding standard understood: host-published ports bind to `127.0.0.1` only.
+- [ ] Non-loopback listener check shows only SSH unless an approved exposure change exists.
 - [ ] Python 3.12 host tooling available.
 - [ ] Node.js LTS and npm installed.
-- [ ] npm global prefix configured without sudo.
-- [ ] Claude Code installed and authenticated.
-- [ ] Codex CLI installed and authenticated.
+- [ ] npm global prefix configured without sudo for the lane user(s) that will use AI CLIs.
+- [ ] Claude Code installed and authenticated for the lane user(s) that will use it.
+- [ ] Codex CLI installed and authenticated for the lane user(s) that will use it.
 - [ ] Cursor local desktop or optional CLI plan decided.
-- [ ] Repository cloned.
-- [ ] `.env` created from `.env.example` and chmod `600`.
+- [ ] Lane users from `vps_development_environment.md` exist before lane commands are run.
+- [ ] `/srv/quant/<lane>/quant-research-platform/` lane layout followed.
+- [ ] No parallel `~/quant` clone maintained on the VPS.
+- [ ] Repository cloned into the selected lane.
+- [ ] `.env` created from `.env.example` in the lane working tree and chmod `600`.
 - [ ] `.env` is ignored by Git.
-- [ ] Docker stack builds.
-- [ ] Docker stack starts.
+- [ ] Docker stack builds when implementation files exist.
+- [ ] Docker stack starts when implementation files exist.
 - [ ] Postgres container healthy.
 - [ ] MLflow container healthy.
 - [ ] App container healthy.
 - [ ] Dash reachable by SSH tunnel only.
 - [ ] MLflow reachable by SSH tunnel only.
-- [ ] Backup directory created.
-- [ ] Backup/restore scripts reviewed before production-like use.
+- [ ] Lane-aware backup directory exists under `/srv/quant/backups/<lane>/`.
+- [ ] Off-host backup destination selected before serious use.
 - [ ] No public database/UI/MLflow ports exposed.
 - [ ] No broker SDKs installed.
 - [ ] No AI Maestro installed.
 
 ---
 
-## 29. Appendix A — quick command sequence for a fresh VPS
+## 32. Appendix A — quick command sequence after security baseline
 
-This section is a compact checklist version. Read the full procedure before running commands.
+Run only after `docs/runbooks/vps_security_baseline.md` is complete.
+
+This is a compact, human-readable checklist, not a single-shot shell script. Read the full procedure before running commands and run each block in the correct user context.
 
 ```bash
-# Base system
+# Base non-security utilities
 sudo apt update
 sudo apt upgrade -y
 sudo apt autoremove -y
-sudo apt install -y ca-certificates curl gnupg lsb-release software-properties-common apt-transport-https unzip zip tar jq htop tree nano vim tmux build-essential pkg-config git python3 python3.12-venv python3-pip postgresql-client fail2ban unattended-upgrades
-
-# Firewall
-sudo ufw allow OpenSSH
-sudo ufw enable
-sudo systemctl enable fail2ban
-sudo systemctl start fail2ban
+sudo apt install -y ca-certificates curl gnupg lsb-release software-properties-common apt-transport-https unzip zip tar jq htop tree nano vim tmux build-essential pkg-config git python3 python3.12-venv python3-pip postgresql-client
 
 # Docker official repo
 sudo install -m 0755 -d /etc/apt/keyrings
@@ -1148,59 +1267,84 @@ sudo chmod a+r /etc/apt/keyrings/docker.asc
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo usermod -aG docker "$USER"
 
-# Node.js 22 LTS
+# Docker log rotation
+sudo tee /etc/docker/daemon.json > /dev/null <<'JSON'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "5"
+  }
+}
+JSON
+sudo systemctl restart docker
+
+# Node.js 22 LTS baseline (run as deploy/admin)
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
+
+# Switch to the dev-lane user before configuring npm globals and AI CLIs.
+# Lane users must already exist per docs/runbooks/vps_development_environment.md.
+ssh deploy@<vps-host>
+sudo -iu quantdev
 mkdir -p ~/.npm-global
 npm config set prefix ~/.npm-global
 echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 
-# AI CLIs
+# AI CLIs, installed for the lane user that will run them
 npm install -g @anthropic-ai/claude-code
 npm install -g @openai/codex
 
-# Repo
-mkdir -p ~/quant
-cd ~/quant
+# Example dev-lane repo clone
+cd /srv/quant/dev
 git clone https://github.com/prodempsey/quant-research-platform.git
-cd quant-research-platform
+cd /srv/quant/dev/quant-research-platform
 cp .env.example .env
 chmod 600 .env
 ```
 
-Log out and back in after adding your user to the Docker group, then verify:
+Verify as the admin user (`deploy` or equivalent), before switching to a lane user:
 
 ```bash
-docker run hello-world
-docker compose version
+sudo docker run hello-world
+sudo docker compose version
+python3 --version
+sudo ss -tulpen | grep -vE '127\.0\.0\.1|\[::1\]'
+```
+
+The non-loopback listener check should show only SSH unless an approved exposure change exists.
+
+Then verify as the lane user that will run the AI tools, for example `quantdev`:
+
+```bash
+sudo -iu quantdev
 node --version
 npm --version
-python3 --version
 claude --version
 codex --version
 gh auth status
 ```
 
+If `gh auth status` fails under `quantdev`, authenticate GitHub CLI under `quantdev`; authentication under `deploy` does not automatically carry over to lane users.
+
 ---
 
-## 30. Appendix B — first troubleshooting checks
+## 33. Appendix B — first troubleshooting checks
 
 ### Docker permission denied
 
-Log out and back in after:
+Do not immediately add the user to the Docker group.
+
+First verify Docker works with sudo:
 
 ```bash
-sudo usermod -aG docker "$USER"
+sudo docker ps
+sudo docker compose version
 ```
 
-Verify:
-
-```bash
-groups
-```
+If lane users later require direct Docker access, that must be handled as an explicit lane-operator exception in `docs/runbooks/vps_development_environment.md` with the root-equivalent Docker group warning preserved.
 
 ### Docker Compose cannot read `.env`
 
@@ -1211,14 +1355,14 @@ ls -la .env
 chmod 600 .env
 ```
 
-Make sure `.env` is in the repo root next to `docker-compose.yml`.
+Make sure `.env` is in the lane repo root next to `docker-compose.yml`.
 
 ### Port already in use
 
 Check:
 
 ```bash
-sudo ss -tulpn | grep -E ':8050|:5000|:5432'
+sudo ss -tulpn | grep -E ':8050|:8051|:8052|:5000|:5432'
 ```
 
 Dash, MLflow, and Postgres should not be publicly exposed. Host-mapped ports, if used, should bind to localhost.
@@ -1228,9 +1372,9 @@ Dash, MLflow, and Postgres should not be publicly exposed. Host-mapped ports, if
 Check:
 
 ```bash
-docker compose logs --tail=100 mlflow
-docker compose logs --tail=100 postgres
-docker compose exec postgres psql -U postgres -c '\l'
+sudo docker compose logs --tail=100 mlflow
+sudo docker compose logs --tail=100 postgres
+sudo docker compose exec postgres psql -U postgres -c '\l'
 ```
 
 Most likely causes:
@@ -1245,7 +1389,7 @@ Most likely causes:
 Check that config is mounted and read-only:
 
 ```bash
-docker compose exec app ls -la /app/config
+sudo docker compose exec app ls -la /app/config
 ```
 
 ### EODHD authentication fails
@@ -1253,7 +1397,7 @@ docker compose exec app ls -la /app/config
 Check only that the variable exists; do not print the key:
 
 ```bash
-docker compose exec app python - <<'PY'
+sudo docker compose exec app python - <<'PY'
 import os
 print("EODHD_API_KEY present:", bool(os.environ.get("EODHD_API_KEY")))
 PY
@@ -1261,20 +1405,27 @@ PY
 
 ---
 
-## 31. Appendix C — source references
+## 34. Open questions
 
-Project source references:
+These do not block v0.4 review, but should be resolved before serious VPS use.
 
-- `docs/engineering_workflow.md`
-- `docs/strategy_decision_record.md`
-- `docs/engineering_spec/01_architecture_overview.md`
-- `docs/engineering_spec/02_data_layer.md`
-- `docs/engineering_spec/03a_feature_engineering.md`
-- `docs/engineering_spec/03b_target_generation.md`
-- `docs/engineering_spec/03c_model_layer_mlflow.md`
-- `docs/engineering_spec/04_backtest_attribution_validation.md`
-- `docs/engineering_spec/05_portfolio_paper_order_intent.md`
-- `docs/engineering_spec/06_operator_ui.md`
-- `docs/traceability_matrix.md`
+| ID | Open question | Current disposition |
+|---|---|---|
+| OQ-VPS-SETUP-01 | Final VPS provider selection remains pending. The locked SDR and `docs/engineering_spec/01_architecture_overview.md` currently reference Hostinger as the initial VPS provider assumption, but operational runbooks should remain provider-neutral unless and until source-of-truth documents are amended. | Open; selected VPS provider may be Hostinger, Contabo, or another Approver-selected provider if source documents are reconciled. |
+| OQ-VPS-SETUP-02 | Exact Postgres major version tag for Phase 1 containers. | Open; use a fixed major tag, not `latest`, when implementation begins. |
+| OQ-VPS-SETUP-03 | Whether the optional host virtualenv `~/venvs/quant-tools` should remain in this setup runbook or move to a local-development procedure. | Open; harmless as host helper default but not a deployed runtime pattern. |
+| OQ-VPS-SETUP-04 | Exact MLflow, Dash, scikit-learn, pandas, numpy, and related library pins. | Open; owned by project dependency manifests during implementation. |
+| OQ-VPS-SETUP-05 | Whether lane users should be granted Docker group membership or all Docker operations should remain `sudo docker` from the admin path. | Open; if granted, document as explicit operational exception in `vps_development_environment.md`. |
+| OQ-VPS-SETUP-06 | Whether a dedicated `docs/runbooks/vps_backup_restore.md` should be created before first serious data accumulation. | Recommended; security baseline already requires off-host backup before serious use. |
 
-External official references are listed in Section 5.
+---
+
+## 35. Closing statement
+
+This runbook does not authorize implementation. It does not install tools by itself. It does not change the SDR, the EW, the locked Engineering Specification sections, or the traceability matrix. If this runbook conflicts with a locked source-of-truth document, the locked document controls.
+
+No public exposure of Postgres, MLflow, Dash, or application ports is introduced by this runbook. No broker SDKs, broker credentials, live trading paths, AI Maestro installation, public TLS, nginx, reverse proxy, VPN, Tailscale, WireGuard, Kubernetes, SIEM, Wazuh, CrowdSec, Redis, Celery, Airflow, Prefect, or CI/CD runners are introduced by this runbook.
+
+---
+
+End of `docs/runbooks/vps_setup_procedure.md` v0.4 DRAFT.
