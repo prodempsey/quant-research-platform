@@ -438,6 +438,37 @@ allowusers deploy
 
 Some OpenSSH versions may not return `challengeresponseauthentication` as a separate line. If that occurs, confirm that the syntax check passed and that password / keyboard-interactive authentication are disabled.
 
+### 12.6.1 Known pitfall: Hostinger Ubuntu 24.04 cloud-init SSH override
+
+On Hostinger Ubuntu 24.04 LTS cloud images (and possibly other cloud images), the file `/etc/ssh/sshd_config.d/50-cloud-init.conf` may contain `PasswordAuthentication yes`. Because OpenSSH applies the first matching directive across all included files, this can override the project hardening directive in `/etc/ssh/sshd_config.d/99-quant-security.conf` and leave password authentication effectively enabled even after restart.
+
+This can only be detected reliably with `sshd -T`, not by inspecting individual config files.
+
+If `sshd -T | grep -i passwordauthentication` returns `passwordauthentication yes` after applying §12.3 and restarting SSH per §12.5, do the following:
+
+1. Inspect each `/etc/ssh/sshd_config.d/*.conf` file to identify which one sets `PasswordAuthentication yes`.
+2. Disable cloud-init SSH config management so it does not regenerate the override on future runs:
+
+```bash
+    sudo mkdir -p /etc/cloud/cloud.cfg.d
+    sudo tee /etc/cloud/cloud.cfg.d/99-disable-ssh-management.cfg > /dev/null << 'EOF'
+    # Disable cloud-init management of SSH config.
+    # SSH hardening is owned by /etc/ssh/sshd_config.d/99-quant-security.conf
+    # per docs/runbooks/vps_security_baseline.md §12.
+
+    ssh_pwauth: false
+    EOF
+```
+
+3. Remove the conflicting drop-in file (path may vary; confirm before deletion):
+
+```bash
+    sudo rm /etc/ssh/sshd_config.d/50-cloud-init.conf
+```
+
+4. Re-run `sshd -t`, restart SSH, and re-verify with `sshd -T` per §12.4–§12.6. `passwordauthentication no` must be confirmed before continuing to §12.7.
+
+Do not skip the `sshd -T` re-verification step. Inspecting individual config files is not sufficient because OpenSSH's first-match-wins behavior means a later file cannot reliably override an earlier one.
 ### 12.7 Test a new login again
 
 Keep your current terminal open. Open another new terminal and test:
@@ -1081,7 +1112,7 @@ These do not block the v0.2 security baseline, but they should be resolved befor
 
 | ID | Open question | Current disposition |
 |---|---|---|
-| OQ-VPS-SEC-01 | What is the final off-host backup destination? | Resolved 2026-05-01: Cloudflare R2. Rationale: zero egress fees support recurring restore-test discipline; 10 GB free tier covers Phase 1; S3-compatible API avoids vendor lock-in; Approver already has a Cloudflare account. Bucket creation, credential management, and automated backup procedure deferred to `docs/runbooks/vps_backup_restore.md` per OQ-VPS-SEC-04. |
+| OQ-VPS-SEC-01 | What is the final off-host backup destination? | Resolved 2026-05-01: Cloudflare R2 selected as Phase 1 primary off-host backup destination. Rationale: zero egress fees support recurring restore-test discipline; 10 GB free tier covers Phase 1 sizing; S3-compatible API avoids vendor lock-in; Approver already operates a Cloudflare account. Bucket creation, lifecycle policy, encryption method, access-key scope, tooling choice, retention, and restore-test procedure deferred to a future approved implementation/update pass against `docs/runbooks/vps_backup_restore.md` (already v1.0 LOCKED / APPROVED). |
 | OQ-VPS-SEC-02 | Should `/srv/quant` and `deploy` later be promoted from runbook defaults into a deployment spec? | Open; currently runbook-level operational defaults. |
 | OQ-VPS-SEC-03 | Should a provider-specific firewall template be created after the VPS provider is selected? | Open; recommended after Hostinger / Contabo / other provider choice is final. |
 | OQ-VPS-SEC-04 | Should a dedicated backup-and-restore runbook be created before first serious data accumulation? | Yes; recommended path is `docs/runbooks/vps_backup_restore.md`. |
