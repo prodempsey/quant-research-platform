@@ -1,9 +1,11 @@
 # Engineering Specification — Section 5: Portfolio Rules, Paper Portfolio State, Broker-Neutral Order Intent, Promotion Gates, and Kill Switch
 
 **Phase 1 scope:** ETF tactical research platform  
-**Document status:** v1.0 candidate (Approver dispositions applied; lock package pending)  
+**Document status:** v1.0 LOCKED / APPROVED  
 **Date:** 2026-04-30  
 **Builder:** ChatGPT  
+**QA Reviewer:** Claude  
+**Approver:** Jeremy  
 **Section:** Engineering Specification — Section 5: Portfolio Rules, Paper Portfolio State, Broker-Neutral Order Intent, Promotion Gates, and Kill Switch  
 **Canonical path:** `docs/engineering_spec/05_portfolio_paper_order_intent.md`
 
@@ -17,11 +19,15 @@
 - Engineering Specification — Section 3c v1.0 LOCKED / APPROVED (`docs/engineering_spec/03c_model_layer_mlflow.md`)
 - Engineering Specification — Section 4 v1.0 LOCKED / APPROVED (`docs/engineering_spec/04_backtest_attribution_validation.md`)
 - Section approval notes and traceability companion files through Section 4
-- `docs/traceability_matrix.md` v0.7
+- Section 5 approval note (`docs/reviews/2026-04-30_spec_05_portfolio_paper_order_intent_approval.md`)
+- Section 5 traceability updates (`docs/reviews/2026-04-30_spec_05_portfolio_paper_order_intent_traceability_updates.md`)
+- `docs/traceability_matrix.md` v0.9
 
 **Scope-statement basis.** Section 5 drafting is authorized from the Approver-provided Section 5 handoff prompt for working session `05_portfolio_paper_order_intent`, plus the locked documents listed above. The handoff explicitly assigns ChatGPT as Builder / spec drafter for this Section 5 drafting cycle only; Claude may later act as QA reviewer / stress tester; Jeremy remains final Approver. This draft does not globally modify the locked Engineering Workflow role assignment.
 
 **Changelog**
+
+- **v1.0 LOCKED / APPROVED (2026-04-30).** Section 5 v1.0 candidate promoted to v1.0 LOCKED / APPROVED with no substantive change to behavior, schema, tests, scope, or ownership. Locking metadata flipped to match the existing approval note, traceability companion, and traceability matrix lock merge. Lock package: `docs/reviews/2026-04-30_spec_05_portfolio_paper_order_intent_approval.md`; `docs/reviews/2026-04-30_spec_05_portfolio_paper_order_intent_traceability_updates.md`. Matrix merge: `docs/traceability_matrix.md` v0.8, later carried forward by v0.9.
 
 - **v1.0 candidate (2026-04-30).** Section 5 candidate v1.0: Approver dispositions applied to v0.3; lock-package commit (approval note, traceability companion, traceability_matrix.md v0.8) pending. No implementation code is started. No approval note is created by this candidate. No traceability companion file is created by this candidate. `docs/traceability_matrix.md` is not updated by this candidate. Approver dispositions are applied surgically: A-PRP-05-01 through A-PRP-05-17 are accepted as Phase 1 defaults; Builder recommendations for A-OQ-05-01 through A-OQ-05-14 and A-OQ-05-16 are accepted; A-OQ-05-15 is resolved by approving existing Section 4 v1.0 evidence surfaces as sufficient for the Phase 1 Section 5 consumption gate, with no Section 4 amendment required before Section 5 lock; A-OQ-05-09 is resolved by allowing Section 5 to record model-state recommendations only in Section-5-owned tables, with no automated `models.*` writes; the gate terminology reconciliation is approved (`consumption` gate = 03c second promotion gate; `paper_to_real_recommendation` gate = Section 5 paper-evidence recommendation layer); and A-OQ-04-07 regime-classifier ownership remains unresolved outside Section 5.
 
