@@ -1130,4 +1130,4 @@ No Section-5 Open Question remains unresolved for the v1.0 candidate disposition
 
 ---
 
-**End of Section 5 v1.0 candidate (Approver dispositions applied; lock package pending).**
+**End of Section 5 v1.0 LOCKED / APPROVED.**
