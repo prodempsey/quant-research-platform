@@ -1081,7 +1081,7 @@ These do not block the v0.2 security baseline, but they should be resolved befor
 
 | ID | Open question | Current disposition |
 |---|---|---|
-| OQ-VPS-SEC-01 | What is the final off-host backup destination? | Open; likely Backblaze B2, Cloudflare R2, AWS S3, local encrypted backup, or another approved external destination. |
+| OQ-VPS-SEC-01 | What is the final off-host backup destination? | Resolved 2026-05-01: Cloudflare R2. Rationale: zero egress fees support recurring restore-test discipline; 10 GB free tier covers Phase 1; S3-compatible API avoids vendor lock-in; Approver already has a Cloudflare account. Bucket creation, credential management, and automated backup procedure deferred to `docs/runbooks/vps_backup_restore.md` per OQ-VPS-SEC-04. |
 | OQ-VPS-SEC-02 | Should `/srv/quant` and `deploy` later be promoted from runbook defaults into a deployment spec? | Open; currently runbook-level operational defaults. |
 | OQ-VPS-SEC-03 | Should a provider-specific firewall template be created after the VPS provider is selected? | Open; recommended after Hostinger / Contabo / other provider choice is final. |
 | OQ-VPS-SEC-04 | Should a dedicated backup-and-restore runbook be created before first serious data accumulation? | Yes; recommended path is `docs/runbooks/vps_backup_restore.md`. |
