@@ -1,0 +1,5 @@
+# Generated from pyproject.toml [project.dependencies] (runtime only).
+# PR #1 declares zero runtime dependencies. This file exists so the
+# EW §8 file inventory contract is honored from the start of the
+# repository's life and so the Test 2(b)-partial dependency-manifest
+# scanner has the file present with deterministic empty-state content.
