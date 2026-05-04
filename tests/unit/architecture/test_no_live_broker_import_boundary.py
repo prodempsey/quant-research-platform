@@ -135,7 +135,7 @@ def scan_python_imports(roots: Iterable[Path]) -> list[Violation]:
             source = path.read_text(encoding="utf-8")
             tree = ast.parse(source, filename=str(path))
             for node in ast.walk(tree):
-                if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                if not isinstance(node, ast.Import | ast.ImportFrom):
                     continue
                 for top, lineno in _top_level_segment_from_node(node):
                     if _normalize_pep503(top) in BROKER_SDK_NAMES_NORMALIZED:

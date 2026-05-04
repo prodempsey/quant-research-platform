@@ -95,7 +95,7 @@ def scan(roots: Iterable[Path], *, exclude_under: Path | None = None) -> list[Vi
             source = path.read_text(encoding="utf-8")
             tree = ast.parse(source, filename=str(path))
             for node in ast.walk(tree):
-                if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                if not isinstance(node, ast.Import | ast.ImportFrom):
                     continue
                 for token, lineno in _canonical_tokens_from_node(node):
                     matched = _matches_forbidden(token)
