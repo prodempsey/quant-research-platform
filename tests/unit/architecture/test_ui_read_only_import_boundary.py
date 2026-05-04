@@ -131,10 +131,8 @@ def test_ui_read_only_boundary_negative_case_catches_planted_violation() -> None
     )
     v = violations[0]
     assert v.offending_token == "quant_research_platform.portfolio", (
-        "expected offending_token 'quant_research_platform.portfolio'; "
-        f"got {v.offending_token!r}"
+        f"expected offending_token 'quant_research_platform.portfolio'; got {v.offending_token!r}"
     )
     assert v.file_path.name == "bad_ui_cross_area_import.py", (
-        "expected file_path to end with 'bad_ui_cross_area_import.py'; "
-        f"got {v.file_path}"
+        f"expected file_path to end with 'bad_ui_cross_area_import.py'; got {v.file_path}"
     )

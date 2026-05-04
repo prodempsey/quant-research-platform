@@ -138,6 +138,5 @@ def test_provider_boundary_negative_case_catches_planted_violation() -> None:
         f"got {v.offending_token!r}"
     )
     assert v.file_path.name == "bad_provider_import.py", (
-        "expected file_path to end with 'bad_provider_import.py'; "
-        f"got {v.file_path}"
+        f"expected file_path to end with 'bad_provider_import.py'; got {v.file_path}"
     )

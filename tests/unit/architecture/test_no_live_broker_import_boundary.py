@@ -284,8 +284,7 @@ def test_no_live_broker_dependency_manifests_negative_case_pyproject() -> None:
         f"expected offending_token 'alpaca_trade_api'; got {v.offending_token!r}"
     )
     assert v.file_path.name == "bad_pyproject_fragment.toml", (
-        "expected file_path to end with 'bad_pyproject_fragment.toml'; "
-        f"got {v.file_path}"
+        f"expected file_path to end with 'bad_pyproject_fragment.toml'; got {v.file_path}"
     )
 
 
@@ -305,6 +304,5 @@ def test_no_live_broker_dependency_manifests_negative_case_requirements() -> Non
         f"expected offending_token 'alpaca_trade_api'; got {v.offending_token!r}"
     )
     assert v.file_path.name == "bad_requirements_fragment.txt", (
-        "expected file_path to end with 'bad_requirements_fragment.txt'; "
-        f"got {v.file_path}"
+        f"expected file_path to end with 'bad_requirements_fragment.txt'; got {v.file_path}"
     )
