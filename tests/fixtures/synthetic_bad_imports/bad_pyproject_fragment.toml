@@ -1,0 +1,4 @@
+[project]
+name = "synthetic-bad-pyproject-fragment"
+version = "0.0.0"
+dependencies = ["alpaca_trade_api"]

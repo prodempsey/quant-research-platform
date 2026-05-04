@@ -1,0 +1,1 @@
+from quant_research_platform.providers import eodhd

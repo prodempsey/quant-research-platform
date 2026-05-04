@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# SCAFFOLD-001 packet §"In-scope behavior" item 4 superset additions
+*.py[cod]
+.venv/

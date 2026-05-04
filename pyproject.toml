@@ -1,0 +1,30 @@
+[project]
+name = "quant-research-platform"
+version = "0.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest==8.3.4", "ruff==0.9.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["quant_research_platform*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["tests/fixtures/synthetic_bad_imports"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+norecursedirs = ["tests/fixtures"]
