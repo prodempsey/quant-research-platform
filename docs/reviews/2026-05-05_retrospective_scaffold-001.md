@@ -778,7 +778,7 @@ This retrospective is v0.1 DRAFT. The §1 non-authorization statement and the §
 
 The verification pass is performed by the operator. The retrospective does not perform it; the retrospective records the gates the pass must close. v1.0 promotion may include a brief verification-results note added to §13.3 itself or kept as a separate v0.1 → v1.0 changelog entry.
 
-A failed verification on any single row above does not invalidate the retrospective's substantive content; it only invalidates the specific factual claim that failed. The retrospective's recommendations and amendment / decision tags are independent of these verification gates and remain valid at v0.1.
+A failed verification on any single row above does not invalidate the retrospective's substantive content; it only invalidates the specific factual claim that failed. The retrospective's recommendations and amendment / decision tags are independent of these verification gates and remain valid at v1.0.
 
 
 #### Verification results (2026-05-05)
