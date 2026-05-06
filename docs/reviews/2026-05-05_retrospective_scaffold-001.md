@@ -766,7 +766,7 @@ This retrospective is v0.1 DRAFT. The §1 non-authorization statement and the §
 | Fact | Source | Verification mechanism |
 |---|---|---|
 | PR #2 merged-at timestamp `2026-05-04T05:39:07Z` | §2.1 | `gh pr view 2 --json mergedAt`; cross-reference against the merge commit on `main` |
-| Merge commit on `main` `1aa31689a922dc074ecf49100a439210f528cb93` | §2.1 | `git rev-parse main`; cross-reference against `gh pr view 2 --json mergeCommit` |
+| PR #2 merge commit `1aa31689a922dc074ecf49100a439210f528cb93` | §2.1 | `gh pr view 2 --json mergeCommit --jq '.mergeCommit.oid'`; optionally confirm the merge commit is reachable from `main` with `git merge-base --is-ancestor 1aa31689a922dc074ecf49100a439210f528cb93 main` |
 | Latest PR commit SHA at final gate `f13e926ade498c1ae97182587365f297f2bbfa21` (preserved as parent of merge commit) | §2.1, §2.2 | `git log --first-parent main`; verify the named SHA is parent of the merge commit |
 | Ruleset `main protection` Active enforcement and configuration restored to pre-merge state | §2.1, §5.2 | `gh api repos/prodempsey/quant-research-platform/rulesets`; compare against the recorded baseline |
 | Repository visibility public, post-secret-scan-audit-clean | §2.1 | `gh api repos/prodempsey/quant-research-platform --jq .visibility`; cross-reference against the prior governance trail recording the secret-scan audit |
