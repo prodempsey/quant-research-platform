@@ -392,3 +392,407 @@ GitHub Markdown renders setext-style H1 (a line followed by `========` separator
 ### 8.5 Why §8 is recorded at all
 
 These artifacts are individually trivial. Collectively, they account for a non-trivial portion of "Did the loop actually do what the diff says?" verification overhead during PR #2. The retrospective records them so the runbook can note them, so future sessions are not surprised, and so the §10 autonomous-loop direction is not credited with solving display-layer problems it does not solve.
+## 9. Session-boundary discipline for agent CLIs
+
+### 9.1 The discipline
+
+The current operator tooling used for Builder / QA work has or may expose continue/resume semantics that preserve session context. Where a CLI supports `--continue` or an equivalent resume mode, the discipline is:
+
+- **Default to fresh context per task packet.** A new task packet starts a new session. Cross-packet `--continue` (or equivalent resume) is forbidden.
+- **`--continue` is permitted only within a single task packet's lifetime.** Within one packet's run — for example, between the Builder's plan-emission step and the Builder's implementation step, or between an initial fix-application and a re-pushed fix-application after GHA failure — `--continue` is acceptable to preserve in-task context. Within-packet `--continue` is permitted only when the resumed session is still operating from the same approved packet, same PR, and same latest PR commit context; if any of those changed materially, start fresh.
+- **A fix loop counts as the same task packet.** A bounded fix prompt issued under §4.4 is part of the originating task packet's lifetime, not a new packet, so `--continue` may be used (subject to the latest-PR-commit qualifier above).
+- **A new PR is a new task packet.** Even if the new PR is closely related to the previous one, the agent invocation starts fresh.
+
+### 9.2 Why this matters
+
+Cross-packet `--continue` accumulates context that is no longer authoritative. The risk is silent: the agent's session retains plan content, prior decisions, prior verification claims, and prior error states from the earlier packet, and reapplies them against the new packet's task. This is exactly the "telephone game drift between coding sessions" failure mode that ICG §1 lists as a thing the policy layer is built to prevent.
+
+PR #2 did not fail this discipline (it was the loop's first task packet, so no cross-packet `--continue` was possible by construction), but the discipline was not documented anywhere before this retrospective. SCAFFOLD-002 is the first task packet where cross-packet `--continue` becomes a possibility, and the discipline must be documented before that work begins.
+
+### 9.3 Practical operating notes
+
+- **At the start of each new task packet, the operator confirms the agent CLI starts with a fresh session.** For Claude Code, this is the absence of a `--continue` flag and / or an explicit fresh-session start. For Codex CLI, the analogous fresh-session start.
+- **At the end of a task packet (after PR merge or after closure), the operator does not preserve the agent CLI session for cross-packet reuse.** The session is closed; the next task packet starts new.
+- **Within a task packet, `--continue` is permitted but not required.** If the operator chooses to start a fresh session mid-packet (for example, after a long break, or to clear out accumulated noise), that is acceptable; the loss is convenience, not governance.
+- **Before using within-packet `--continue` after any push, the operator confirms the prompt/session is updated to the latest PR commit SHA.** This is the operating-procedure corollary of ICG §20's latest-commit SHA validation: a resumed session that references a stale SHA must not be used to drive a gate.
+
+### 9.4 Interaction with the autonomous-loop direction
+
+The §10 autonomous-loop direction proposes role-bounded, fresh-session agent invocations as boundary C. Under that model, the dispatcher invokes a new agent process per stage, and the question of `--continue` does not arise — every dispatch is a fresh session by construction. The discipline in §9.1 is the manual / chat-Governor-era equivalent of that boundary, applicable to PR #2's chat-Governor + operator-relay model and to any task packet (including SCAFFOLD-002) that runs before the §10 direction is implemented.
+
+`amendment-required: docs/implementation_context_governance.md` (the discipline aligns with ICG §1 and ICG §11 — fresh-context session discipline — but the per-task-packet rule is not currently spelled out at this resolution).
+
+`amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` (operating note on the operator's start-of-packet and end-of-packet behavior).
+
+---
+
+## 10. Recommended forward direction — autonomous-loop architecture (condensed)
+
+§10 records the operator-developed autonomous-loop direction as the recommended forward architecture for replacing the chat-Governor + operator-relay plumbing of the loop. The retrospective records this direction at a condensed level: the loop's *governance* (role boundaries, gate sequencing, source-of-truth hierarchy, approval-matrix items) is unchanged; only the loop's *plumbing* (how state transitions are coordinated, how prompts are dispatched, how outputs are captured) is the subject of the autonomous direction.
+
+If the §10 material grows past the condensed scope of this retrospective during drafting or review, the deeper architecture content moves to a separate companion at `docs/reviews/2026-05-05_autonomous_loop_proposal.md`. That companion would itself be observation-and-recommendation only; it would not authorize implementation. Until and unless that companion is created, §10 is the authoritative retrospective record of the recommended direction.
+
+§10 is recorded as a recommendation, not as approved architecture. Every substantive item in §10 is `amendment-required:` or `decision-required:`. Nothing in §10 is decided by this retrospective.
+
+### 10.1 Bias disclosure
+
+The chat-Governor that drafted prior sessions on PR #2 — and that is drafting this retrospective — is the role being partially replaced under the autonomous direction. The retrospective treats critiques of the autonomous direction with appropriate skepticism for that structural conflict of interest. Codex (in the proposed Auditor role, or as adversarial reviewer in the absence of an Auditor) is the appropriate check on chat-Governor critiques of its own replacement. The Approver remains the final authority over both the architecture decision and any specific gate's verdict.
+
+This disclosure is recorded once at the head of §10 and is not repeated in subsequent sub-sections. Readers should apply the disclosure to the entire §10 material, including the recommended directions and the design-risk flags in §10.7 and §10.9.
+
+### 10.2 Why the autonomous direction is being recommended
+
+The §3 operator-effort cost is the architectural driver. The PR #2 loop completed correctly but consumed enough operator foreground time that a second SCAFFOLD-class task running under the same plumbing would compound the cost. The §3 / §4 mitigations (pre-approved-commands cheat sheet, bounded-fix-prompt incidental-command pre-authorization, Builder verification discipline, structured blocker template, prompt-template reuse) reduce the relay volume but do not change the relay model.
+
+The autonomous direction is recommended because it changes the *model*, not just the volume. Under the chat-Governor + operator-relay model, every channel transition between agents is an operator relay event by construction. Under a dispatcher model, channel transitions are deterministic plumbing; the operator's foreground time is consumed by the items that actually require Approver judgment (final PR approval, blocked-state escalation, ambiguous-state resolution), not by every relay between Builder and Project Governor / Context Auditor and QA Reviewer.
+
+The autonomous direction does not promise faster wall-clock cycles than the current model — see §10.5 on the polling-overhead tradeoff. It promises lower operator-foreground cost. Those are different axes; the recommendation is grounded in the operator-foreground axis.
+
+### 10.3 Architecture summary
+
+Four named components, with one role and one boundary each:
+
+- **GitHub** — durable state-of-record and message bus. PR comments are the human-readable audit trail. Labels are the current loop-state. Checks and statuses are gate pass/fail records. Fenced JSON blocks inside PR comments are the machine-readable handoffs (MVP format; a richer artifact-store format is deferred). GitHub Actions logs and poller logs are part of the execution trace. The Issue body is the task packet / scope source.
+- **VPS poller / dispatcher** — runtime coordinator. Reads PR/Issue labels, comments, and checks. Determines the next allowed state transition from a fixed state machine. Invokes the correct agent prompt. Captures structured output. Posts comments, artifacts, labels, and checks. Does not interpret strategy, rewrite specs, approve PRs, or decide merge readiness beyond mechanical routing. The poller / dispatcher boundary is recorded in §10.5; its preservation under operational pressure is recorded as a design risk in §10.7.
+- **GitHub Actions** — deterministic CI / check runner. Authoritative verdict source for tests, lint, format, and any other CI-defined gate. Unchanged from the current model.
+- **Agent CLIs (Claude Code, Codex CLI)** — fresh-session role-bounded invocations dispatched by the poller. No persistent agent process; no agent-to-agent direct communication; no agent-resident state across stages. The fresh-session-by-construction property is the autonomous direction's equivalent of §9's manual session-boundary discipline.
+
+The Approver remains the final authority and the only authority that merges PRs. This is unchanged from the current model and is reaffirmed under §10.5 and §10.8.
+
+### 10.4 Five-role model
+
+The current four-role model (Builder, QA Reviewer, Project Governor / Context Auditor, Approver) expands to five under the autonomous direction. The role boundaries are unchanged from existing governance; the addition is a Governor Auditor role that audits the Project Governor / Context Auditor's gate output rather than the Builder's diff.
+
+- **Builder.** Builds only from approved task packet or fix packet. Implementation only. No self-certification. No merge, no approval. Implemented initially through Claude Code if the Phase-0 spike validates headless operation. Role boundary unchanged from runbook §3 / ICG §6.
+- **QA Reviewer.** Audits the PR diff against the task packet, relevant approved spec sections, relevant SDR decisions, GitHub Actions output, traceability matrix, allowed/forbidden-files boundary. Implemented initially through Codex CLI if the Phase-0 spike validates headless operation. Role boundary unchanged from runbook §3 / ICG §21.
+- **Project Governor / Context Auditor.** Orchestrates state, performs deterministic guardrail checks, validates plan against source-of-truth hierarchy, performs post-QA and post-fix drift reviews, prepares fix packets or final PR approval brief, routes to Approver on approval-matrix items. Implemented initially through Claude CLI if the Phase-0 spike validates headless operation. Role boundary unchanged from runbook §3 / ICG §6.
+- **Governor Auditor (new role).** Audits the Project Governor / Context Auditor's gate output and routing decision. Does not orchestrate. Does not re-do QA (QA was already performed by the QA Reviewer; Auditor scope explicitly excludes Builder-output review). The Auditor may inspect the Governor gate output, cited PR state, labels, checks, comments, and referenced diff/QA evidence as needed to audit the routing decision, but must not re-perform full PR QA or issue implementation/fix instructions. Implemented initially through Codex CLI as the adversarial counterpart to a Claude-CLI-implemented Project Governor / Context Auditor. The disagreement protocol is bounded: Auditor either passes or challenges; Project Governor / Context Auditor gets one response cycle; Auditor gets one re-check; if disagreement remains, the loop stops and escalates to the Approver. No endless debate.
+- **Approver.** Final approver, merger, escalation decision-maker. Unchanged from EW §2.3 and from the current model.
+
+The Governor Auditor role is the principal new boundary introduced by the autonomous direction. It exists because the proposed dispatcher's correctness depends on the Project Governor / Context Auditor's gate output being trustworthy, and a single LLM agent producing the gate output and the routing decision is an obvious single-point-of-failure under adversarial-review standards. The Auditor is the adversarial review.
+
+The role-naming distinction matters: this retrospective uses **Project Governor / Context Auditor** as the canonical governance role name, consistent with runbook §3 and ICG §6, and parenthetically notes that the autonomous direction proposes implementing that role through Claude CLI under the Phase-0 spike. The retrospective does not rename the governance role to "Claude Governor." Tool identity is secondary to role boundary; the role survives a CLI change.
+
+### 10.5 Runtime coordination — polling, not webhooks, for β.1 MVP
+
+The autonomous direction's β.1 MVP coordinates state transitions through a VPS-resident poller against the GitHub API. Webhooks are explicitly *not* the β.1 mechanism; they are recorded as the likely long-term evolution, requiring a separate approved task with its own deployment / security review.
+
+**Why polling, not webhooks, for β.1.** Webhooks require a public ingress endpoint. The VPS posture is intentionally private: no public application service ports, loopback-only bindings, explicit approval required for any reverse-proxy / public-exposure change (per `docs/runbooks/vps_development_environment.md` §14). A webhook receiver introduces a public-ingress decision the project is not ready to make at MVP time, and the security review for that decision (HMAC validation, HTTPS termination, endpoint exposure choice, firewall / reverse-proxy / TLS / tunnel choice, service-user model, logging, abuse handling) is itself substantial. Polling avoids the public-ingress decision entirely; the VPS reaches out to GitHub, GitHub never reaches in.
+
+**Rate-limit-aware polling required from day 1, not deferred.** The β.1 poller cannot treat rate-limit handling as a follow-up; it is part of the MVP. Required mechanics:
+
+- *Targeted queries only.* No broad `gh api` sweeps. Each poll cycle queries a known set of active PRs, not the entire repo.
+- *ETags and conditional requests.* On every endpoint that supports them. 304 behavior and rate-limit accounting must be verified per endpoint during Phase-0.
+- *Active-PR filtering.* Poll only PRs carrying `ai:*` loop-state labels. Closed and merged PRs are not polled.
+- *Last-seen-ID tracking.* Avoid re-fetching unchanged comment streams.
+- *Rate-limit header monitoring.* `X-RateLimit-Remaining` and `X-RateLimit-Reset` logged per cycle. Warn at 80% of hourly budget consumed; back off at 95%; on 429, stop and wait for reset.
+- *Polling cycle interval.* Default 60 seconds. Adaptive intervals (faster during active invocations, slower when idle) are acceptable and preferred.
+- *Exponential backoff on 429 / secondary rate limits.* Standard mechanic; not a research item.
+
+**Operator-perceived latency tradeoff.** The poller introduces clock-time overhead the operator-relay model does not. Worst-case end-to-end latency of a four-stage β.1 loop with 60-second polling is roughly four minutes of polling overhead on top of agent invocation time. This is acceptable for MVP because clock time runs in the background while the operator is doing other work; operator effort runs in the foreground and is the cost the autonomous direction is built to reduce. If clock-time overhead becomes painful before webhooks land, adaptive polling intervals are the near-term mitigation. Other GitHub-API-based mechanisms (e.g., `repository_dispatch`) are recorded as open engineering options under §10.9 rather than as near-term operational mitigations. Webhooks are the long-term answer, not the MVP answer.
+
+**Poller / dispatcher boundary.** The poller / dispatcher executes deterministic state-machine transitions only. It must not:
+
+- interpret ambiguous PR state;
+- invent fixes;
+- decide scope;
+- approve PRs;
+- merge PRs;
+- resolve governance conflicts.
+
+When the state machine encounters an input it cannot route deterministically, the dispatcher stops and escalates to the Approver. This is the boundary that distinguishes "dumb plumbing" from "reasoning agent," and its preservation under operational pressure is recorded as a design risk under §10.7. The autonomous direction's correctness depends on this boundary holding; if the boundary erodes incrementally — for example, by allowing the dispatcher's "next allowed state transition" logic to absorb special-case handling for ambiguous PR states — the dispatcher silently becomes a reasoning agent, and the Auditor / Approver gates are no longer protecting what they were built to protect.
+
+**Auto-merge prohibition reaffirmed.** Under the autonomous direction, agents may produce checks, comments, and labels. The Approver remains the only authority that merges PRs. This is reaffirming existing governance from `docs/runbooks/vps_development_environment.md` §14 and EW §2.3, not introducing a new rule. The autonomous direction's correctness depends on the prohibition holding under all phases (Phase-0, β.1, β.2, and any future evolution including webhooks).
+
+`amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` (autonomous-loop architecture as a runbook section under the same governance umbrella, drafted only after the Phase-0 spike resolves the make-or-break headless-invocation questions in §10.6).
+`amendment-required: docs/implementation_context_governance.md` (policy-layer recognition of the dispatcher boundary and the Auditor role; ICG already governs Builder / QA / Project Governor / Context Auditor / Approver, but does not yet recognize a deterministic-dispatcher coordination layer or an Auditor role).
+`decision-required: autonomous-loop architecture acceptance` (the architecture itself is a Phase-1 governance decision; this retrospective recommends, the Approver decides).
+
+### 10.6 Phasing — Phase-0 spike, β.1, β.2; SCAFFOLD-002 independent
+
+The autonomous direction is phased into three steps. The phasing is recorded as the recommended sequence; the actual phase boundaries are decisions reserved to the Approver and require the SCAFFOLD-class autonomous-loop task packet that this retrospective does not draft.
+
+**Autonomous-loop implementation track:** Phase-0 spike → β.1 → β.2.
+
+**SCAFFOLD-002 implementation workstream:** independent. SCAFFOLD-002 is not gated on the autonomous-loop architecture existing. If the autonomous loop is not ready, SCAFFOLD-002 proceeds under the current chat-Governor + operator-relay model, with the §3 / §4 mitigations applied where approved. The two tracks may run in parallel; the §1 non-authorization statement applies equally to both.
+
+**Phase-0 spike — make-or-break.** The autonomous direction has two questions whose answers determine whether the architecture is viable at all:
+
+1. **Claude Code non-interactive / headless invocation.** Exact command, exact output behavior, exact structured-output behavior. The Builder and Project Governor / Context Auditor roles depend on it.
+2. **Codex CLI non-interactive / headless invocation.** Exact command, exact output behavior, exact structured-output behavior. The QA Reviewer and Governor Auditor roles depend on it.
+
+If either CLI cannot be invoked headlessly with reliable structured output, the architecture changes — either by substituting a different agent runtime, by accepting an interactive component (which removes much of the autonomous direction's value), or by deferring the entire direction. The Phase-0 spike is therefore a hard gate on the SCAFFOLD-class autonomous-loop task packet. The retrospective recommends that the Phase-0 spike be authorized as its own deliverable, scoped narrowly to verifying these two CLIs and recording the verified commands and behaviors, *before* any β.1 task packet is drafted.
+
+The Phase-0 spike's deliverable is documentation, not code. Specifically: a Phase-0 verification note recording, for each CLI, the verified headless invocation command, the verified output format, the verified exit-code behavior on the success and failure paths, the verified prompt-input mechanism (stdin, file, argument), and any operational caveats discovered during verification. The Phase-0 verification note belongs under `docs/reviews/`. Suggested path pattern: `docs/reviews/2026-05-05_phase0_autonomous_loop_headless_cli_verification.md` (or the equivalent date-stamped path on the day the spike is performed). It is not a runbook amendment by itself; it is the input to the SCAFFOLD-class autonomous-loop task packet.
+
+**β.1 — dispatcher with four roles.** β.1 implements the hybrid GitHub-state + VPS-poller dispatcher with Builder, QA Reviewer, and Project Governor / Context Auditor roles. The Governor Auditor is not part of β.1; during the β.1 window, the Approver manually performs any Auditor-like challenge/review needed before final approval. The β.1 scope includes pause / resume / restart / idempotency mechanics from the start (per §10.7), the rate-limit-aware polling mechanics from day 1 (per §10.5), and the disagreement-protocol mechanics scoped down to a single Governor-without-Auditor configuration. β.1 is the proof point that the dispatcher works at all; it is not the final architecture.
+
+**β.2 — add Governor Auditor.** β.2 layers the Codex-CLI-implemented Governor Auditor on top of working β.1 dispatcher mechanics. β.2 introduces the bounded disagreement protocol described in §10.4 between Project Governor / Context Auditor and Governor Auditor. β.2 is the autonomous direction's full five-role configuration.
+
+**Why β.1 and β.2 are split.** Restart correctness, slash-command authorization, headless CLI behavior, and idempotent state transitions are make-or-break. The retrospective recommends a reliable autonomous-loop MVP with Approver-as-substitute-Auditor first, then layering the Auditor on top, rather than a single-step rollout that combines new dispatcher mechanics with new role mechanics simultaneously. A combined rollout doubles the surface area for failure-mode discovery; a phased rollout isolates the dispatcher's failure modes from the Auditor's failure modes.
+
+**Recommended sequencing summary.** Phase-0 spike → SCAFFOLD-class autonomous-loop task packet draft → β.1 task packet → β.1 build under the current loop → β.2 task packet → β.2 build under β.1. SCAFFOLD-002 runs independently under whichever loop architecture is active at the time it is authorized.
+
+`decision-required: Phase-0 spike authorization` (separate from the autonomous-loop architecture acceptance; the Phase-0 spike can be authorized without committing to β.1 or β.2).
+`decision-required: β.1 / β.2 phasing acceptance` (only after the Phase-0 spike resolves the make-or-break questions; the Approver may revise the phasing based on Phase-0 findings).
+
+### 10.7 Primary design concerns — restart correctness, slash-command authorization, dispatcher-boundary erosion
+
+These three concerns are recorded as primary design concerns for the SCAFFOLD-class autonomous-loop task packet, not as objections to the architecture. The retrospective's posture is that each is solvable, and that each is most likely to fail if rushed or under-specified at the SCAFFOLD-class packet stage. They are recorded here so that the SCAFFOLD-class packet treats them as first-class scope items rather than as implementation details discovered during build.
+
+**Restart correctness (operator-elevated, primary design concern).** Every dispatched agent run gets a unique invocation_id. Before dispatching, the poller records the active invocation_id, the agent role, the PR number, the latest PR commit SHA, the stage, the started-at timestamp, and the expected output type in GitHub-visible state. Every agent output comment includes the same invocation_id in its structured block. On restart, the poller reads current labels / checks / comments, finds the active invocation_id, and determines exactly one of:
+
+- *matching completion output exists* → advance state idempotently;
+- *no completion output and timeout not reached* → wait;
+- *no completion output and timeout reached* → retry if read-only stage, or escalate / recovery-check if Builder stage (Builder interruption is more conservative because partial local file edits may exist);
+- *ambiguous state* → stop and escalate to Approver.
+
+The poller is idempotent: no duplicate dispatch, no duplicate state advancement, retry only with a new invocation_id. The handoff from PR #2 elevated this concern explicitly, and the retrospective records it as elevated. A dispatcher that cannot recover correctly from a restart is a dispatcher that silently corrupts state under operational disruption; that failure mode is exactly the class of failure the loop is built to prevent.
+
+**Slash-command authorization (operator-elevated, primary design concern).** The poller honors slash-commands (`/loop pause`, `/loop resume`, `/loop stop`, `/governor rerun`, `/codex-qa rerun`, `/auditor rerun`) only from authorized users — write / maintain / admin permission at minimum. Commands are honored only as the first non-whitespace content on the first line of a standalone comment, not as embedded text inside Builder or QA outputs. Stop / resume / override commands may require confirmation syntax (e.g., `/loop stop confirm`). A slash-command authorization failure mode that the SCAFFOLD-class packet must explicitly handle: a Builder agent that quotes a slash-command in its own output as part of explanatory text must not trigger the dispatcher to act on the quoted command. Quoting and dispatch must be cleanly separated by parser design, not by hope.
+
+**Dispatcher-boundary erosion (design risk).** The poller / dispatcher boundary in §10.5 — deterministic state-machine transitions only, never reasoning — is the boundary the autonomous direction's correctness depends on. The boundary is at risk under operational pressure: when the dispatcher encounters ambiguous PR state, the path of least resistance is to add special-case handling to the "next allowed state transition" logic rather than to escalate to the Approver. Each special case looks small in isolation; the cumulative effect is a dispatcher that has silently absorbed reasoning. The SCAFFOLD-class autonomous-loop task packet must specify (a) the explicit set of state-machine transitions the dispatcher is allowed to perform, (b) the explicit escalation behavior for any input outside that set, and (c) a periodic review mechanism that re-checks whether the dispatcher's logic has drifted past the deterministic boundary. The Auditor role provides one layer of protection against this drift, but the Auditor audits gate output, not dispatcher logic; the dispatcher's boundary is its own audit responsibility.
+
+The handoff from PR #2 elevated restart correctness and slash-command authorization as primary design concerns. The dispatcher-boundary erosion risk is recorded by this retrospective as a third primary concern at the same severity level, because the autonomous direction is structurally exposed to it and existing governance does not yet cover it.
+
+`amendment-required: docs/implementation_context_governance.md` (policy-layer recognition of the dispatcher boundary, the restart-correctness invariants, and the slash-command authorization rules; these are implementation-context-governance concerns, not just runbook concerns, because they govern how the Project Governor / Context Auditor function is mechanized).
+`amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` (operating procedure for the dispatcher's intervention controls — pause / resume / stop / rerun — and the slash-command syntax).
+
+### 10.8 Explicit non-goals
+
+The autonomous direction explicitly excludes the following. Each is reaffirming existing governance where it already exists, not introducing a new prohibition.
+
+- **No auto-merge under any architecture.** Reaffirms `docs/runbooks/vps_development_environment.md` §14 and EW §2.3. Agents may produce checks, comments, and labels; the Approver remains the only authority that merges PRs. The prohibition holds under Phase-0, β.1, β.2, and any future webhook-based evolution.
+- **No AI / bot account as GitHub PR approver.** Reaffirms `docs/runbooks/vps_development_environment.md` §14 and EW §2.3. The structural branch-protection problem under §5 is *not* solved by giving an AI the approver role.
+- **No agent-to-agent direct communication.** Agents do not call other agents. State transitions are mediated by the dispatcher reading and writing GitHub state. The fresh-session-by-construction property in §10.3 depends on this.
+- **No webhook-driven dispatch in β.1 MVP.** Webhooks are deferred to long-term evolution. The β.1 dispatcher uses polling per §10.5. Adopting webhooks at any later phase requires a separate approved task with its own deployment / security review (HMAC validation, HTTPS termination, endpoint exposure decision, firewall / reverse-proxy / TLS / tunnel choice, service-user model, logging, abuse handling).
+- **No Approver as relay operator.** The autonomous direction's purpose is to remove the Approver from the per-channel relay path. The Approver remains in the loop for approval-matrix items (final PR approval, blocked-state escalation, ambiguous-state resolution per §10.7); the Approver is not a step in routine state transitions.
+- **No poller-as-reasoning-agent.** The dispatcher's deterministic-only boundary in §10.5 holds. The dispatcher-boundary-erosion risk in §10.7 names this explicitly.
+- **No pane-driven inter-agent communication.** Agent invocations are dispatched processes, not terminal-pane content piped between operator-controlled panes. The cockpit four-pane model (A — Operator, B — Builder, C — Cleanup, D — QA) remains operator-side for visibility, not as an inter-agent channel.
+
+The non-goals are recorded explicitly because the autonomous direction's design space is large and each excluded option has surface plausibility. Recording the exclusions makes the SCAFFOLD-class autonomous-loop task packet's scope review tractable.
+
+### 10.9 Open engineering questions deferred to the SCAFFOLD-class packet
+
+The following questions are recorded for the SCAFFOLD-class autonomous-loop task packet to resolve. They are *not* answered in this retrospective. Items 1 and 2 are make-or-break per §10.6 and are the Phase-0 spike's deliverable. Items 3 through 12 are scope items the SCAFFOLD-class packet must address.
+
+1. Exact Claude Code non-interactive / headless invocation command and output behavior. *(Phase-0 spike deliverable.)*
+2. Exact Codex CLI non-interactive / headless invocation command and output behavior. *(Phase-0 spike deliverable.)*
+3. Whether the poller authenticates to GitHub as `quantdev`, a dedicated machine user, or another approved identity. The decision interacts with the slash-command authorization rules in §10.7.
+4. Minimum viable poller runtime: bash + `gh`, Python script, cron / systemd timer, or long-running service. Each option has different restart-correctness implications per §10.7.
+5. How GitHub checks / statuses are created from poller results. Native `gh api` checks-API usage, statuses-API usage, or a combination.
+6. How structured JSON blocks are parsed reliably from PR comment bodies. Fenced-block delimiter convention, parser robustness against agent-produced quoting and escaping, and behavior under partial / truncated comment content.
+7. How the poller prevents duplicate invocation and handles restart in detail (high-level invariants in §10.7; concrete mechanism deferred).
+8. How operator override comments are parsed and authorized in detail (high-level invariants in §10.7; concrete mechanism deferred).
+9. What labels are added or revised for autonomous stages, including pause-state labels and the §6 terminal-state label. The autonomous direction's label set is a superset of the current 15-progression / 5-blocking model; the actual delta is for the SCAFFOLD-class packet to specify.
+10. Whether this requires amendments to `docs/runbooks/governor_gated_github_pr_agent_loop.md`, `docs/implementation_context_governance.md`, or both. The retrospective tags both throughout §10; the SCAFFOLD-class packet finalizes the split.
+11. **GitHub comment-size / evidence-storage boundary (design risk).** GitHub comment bodies have practical size limits, and Builder verification outputs, large diff excerpts, multi-megabyte logs, and structured artifacts may exceed those limits. The β.1 dispatcher's reliance on PR comments as the durable handoff format is correct for state but may be insufficient for some categories of evidence. The SCAFFOLD-class packet must specify (a) what Builder / QA / Governor / Auditor outputs are expected to fit in a single comment, (b) what outputs require an alternative durable store (committed file under `docs/reviews/`, attached artifact, repository-dispatch event payload, or external object store), and (c) the boundary criteria for choosing between in-comment and out-of-comment evidence. The retrospective records this as an open engineering question rather than as a near-term mitigation; the answer is design work, not an operational tweak.
+12. **GitHub `repository_dispatch` events as a clock-time-overhead mitigation.** Recorded here per §10.5's redirection. `repository_dispatch` is GitHub-API-based and avoids the public-ingress decision that webhooks require, but introduces its own design / security / authorization questions: who can fire dispatch events, how are they authorized, how are they scoped to the autonomous-loop dispatcher rather than to other consumers, and how are they reconciled with the polling-based state machine. Evaluation belongs in the SCAFFOLD-class packet, not in this retrospective.
+
+The list is not promised to be exhaustive. It is the set of open questions the retrospective surfaces; the SCAFFOLD-class packet may identify others during its own scope review.
+
+`artifact-required: SCAFFOLD-class autonomous-loop task packet` (a new artifact, drafted under EW §2.2 task-packet discipline, ICG governance, and the approved runbook workflow; not authored by this retrospective).
+
+---
+
+## 11. Recommendations register
+
+§11 is the actionable index for this retrospective. Every observation in §3–§10 that produces a follow-on action appears here once, in summary form, with its tag.
+
+**Tag semantics.** Tags below have the following operative meanings:
+
+- `amendment-required: <doc>` — the recommended action requires a change to the named document, performed via that document's standard change process. EW changes follow EW §13. ICG / runbook changes follow each document's own change process. Locked Engineering Specification sections are not in scope for this retrospective and are not tagged here.
+- `artifact-required: <artifact>` — the recommended action requires a new artifact (task packet, verification note, companion proposal). The new artifact is drafted under the governance regime appropriate to its type (EW §2.2 task-packet discipline for task packets; runbook / ICG governance for operating notes; EW §3 for Engineering Specification sections, none of which appear in this retrospective).
+- `decision-required: <topic>` — the recommended action requires an Approver decision before any amendment or artifact is drafted. Tags this severity are precondition gates on the corresponding `amendment-required:` or `artifact-required:` items.
+- `informational` — recorded for the retrospective's narrative integrity; no follow-on action.
+
+The retrospective does not draft amendment text, does not draft task packets, and does not approve any item below.
+
+### 11.1 Operator-experience cost mitigations (§3)
+
+| Item | Source | Tag(s) |
+|---|---|---|
+| Pre-approved-commands cheat sheet, by tool (Codex CLI `p` safe / never-safe sets; Claude Code option-2 guidance; scope guard limiting preauthorization to repo / PR context only) | §3.3 #1 | `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` |
+| Bounded fix prompts pre-authorize incidental sanity commands (`which`, `--version`, `ls`, `cat`, etc., subject to the §3.3 scope guard) | §3.3 #2 / §4.4 | `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` |
+| Mid-loop request to spawn a Governor agent — declined as rules-mid-flight; structural change deferred to §10 | §3.4 | `informational` |
+
+### 11.2 Process gaps observed during PR #2 (§4)
+
+| Item | Source | Tag(s) |
+|---|---|---|
+| Project Governor / Context Auditor plan-validation checklist gains four items: pre-existing-files-vs-create, packet → plan wording-drift, ruff-rule-vs-selected-ruleset, formatter-step-omission | §4.1 | `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md`; `amendment-required: docs/implementation_context_governance.md` |
+| Builder must include verification output inline with state-of-the-world claims; Project Governor / Context Auditor rejects unsupported claims and may spot-check critical claims under deterministic guardrail review | §4.2 | `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md`; `amendment-required: docs/implementation_context_governance.md` |
+| Cockpit principle refined to "no local *verification* runs as source-of-truth"; Builder-side use of project-pinned formatter / dev-toolchain transforms permitted; GHA remains the authoritative verdict | §4.3 | `amendment-required: docs/implementation_context_governance.md`; `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` |
+| Bounded fix-prompt template gains an "incidental commands pre-authorized" line (per §3.3 scope guard) | §4.4 | `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` |
+| Bounded mid-flight blocker template (Builder's exit hatch from the fix-loop) added | §4.5 | `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` |
+| Heredoc / Cursor terminal-pane truncation operating note (>50-line paste threshold; nano + `/tmp` transit-file + `gh ... --body-file` workaround for large comments) | §4.6 | `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` |
+| Approver pre-issuance prompt review formalized only for first-use templates, high-risk prompts, approval-sensitive tasks, or ambiguity-flagged prompts; reusable Governor prompt templates established | §4.7 | `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` |
+| Adopt canonical runbook §6 step numbers in chat, PR comments, and retrospective records; avoid separate session-step shorthand | §4.8 | `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` |
+
+### 11.3 Solo-operator branch-protection procedure (§5)
+
+| Item | Source | Tag(s) |
+|---|---|---|
+| Solo-operator branch-protection procedure: recommended Phase 1 default A — formalize relax / merge / restore window with deterministic restore-verification tripwire; revisit B if a trusted second human maintainer exists | §5.3 | `decision-required: solo-operator branch-protection procedure`; `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` (after decision); `amendment-required: docs/runbooks/vps_development_environment.md` (only if option B selected) |
+| Standing rule (regardless of A/B/C): any temporary branch-protection or ruleset relaxation must have a documented restore step and a verification record before the loop is considered closed | §5.3 | `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` |
+
+### 11.4 Loop-closure / terminal-label record gap (§6)
+
+| Item | Source | Tag(s) |
+|---|---|---|
+| Add `ai:loop-complete` as a sixteenth progression label, applied at post-merge; pair with a structured Project Governor / Context Auditor completion-confirmation comment as the durable narrative record (B + C combination); closed-without-merge label sub-question scoped into the runbook amendment, not into this retrospective | §6.4 | `decision-required: terminal-label model`; `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` (label list in §4 and Step 24 in §6 once decided) |
+
+### 11.5 Cursor cleanup-pass status (§7)
+
+| Item | Source | Tag(s) |
+|---|---|---|
+| Skip Cursor as a cleanup-pass agent on SCAFFOLD-002 by default; retry only if (a) autonomous-loop direction has progressed far enough that the cleanup pass runs without operator relay, (b) §3.3 cheat sheet adopted in a form that explicitly authorizes Cursor's cleanup-pass commands, or (c) SCAFFOLD-002 scope contains cleanup that GHA cannot easily diagnose in a single fix loop | §7.4 | `decision-required: Cursor cleanup-pass status for SCAFFOLD-002` |
+| Cursor and the autonomous-loop direction are orthogonal; Cursor's status can change without affecting §10, and §10 can be adopted without affecting Cursor's status | §7.5 | `informational` |
+
+### 11.6 Cosmetic / rendering artifacts (§8)
+
+| Item | Source | Tag(s) |
+|---|---|---|
+| Cursor terminal renderer auto-linkifies dotted filenames; mitigation is operator awareness or a different terminal client | §8.1 | `informational`; optional runbook operating note |
+| Cockpit diff renderer occasionally displays duplicate lines in long file-create previews; artifact / diff wins per EW §9 | §8.2 | `informational`; optional runbook operating note |
+| Heredoc previews compress blank lines visually but preserve them in actual file content | §8.3 | `informational`; optional runbook operating note |
+| GitHub renders setext-style H1 (`========`) as huge headers; prefer ATX-style (`# Heading`) in PR comments authored by Project Governor / Context Auditor or QA Reviewer | §8.4 | `informational`; optional runbook operating note |
+
+### 11.7 Session-boundary discipline for agent CLIs (§9)
+
+| Item | Source | Tag(s) |
+|---|---|---|
+| Default to fresh context per task packet; cross-packet `--continue` or equivalent forbidden; within-packet `--continue` permitted only when same approved packet, same PR, and same latest PR commit context; before within-packet `--continue` after any push, operator confirms the prompt/session is updated to the latest PR commit SHA | §9.1, §9.3 | `amendment-required: docs/implementation_context_governance.md`; `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` |
+
+### 11.8 Autonomous-loop architecture (§10)
+
+| Item | Source | Tag(s) |
+|---|---|---|
+| Autonomous-loop architecture acceptance (GitHub state-of-record + VPS poller dispatcher + fresh-session agent CLIs + Approver final authority) | §10.5 | `decision-required: autonomous-loop architecture acceptance` |
+| Autonomous-loop architecture acceptance, if approved, requires runbook and ICG amendments recognizing the dispatcher boundary, GitHub-state/poller architecture, fresh-session CLI dispatch model, and Governor Auditor role | §10.5 | `decision-required: autonomous-loop architecture acceptance`; `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md`; `amendment-required: docs/implementation_context_governance.md` |
+| Phase-0 spike authorization (separate from architecture acceptance; can be authorized without committing to β.1 / β.2; deliverable is a verification note at `docs/reviews/2026-05-05_phase0_autonomous_loop_headless_cli_verification.md` or the equivalent date-stamped path) | §10.6 | `decision-required: Phase-0 spike authorization`; `artifact-required: Phase-0 verification note under docs/reviews/` |
+| β.1 / β.2 phasing acceptance (only after Phase-0 resolves the make-or-break questions; phasing may be revised based on Phase-0 findings) | §10.6 | `decision-required: β.1 / β.2 phasing acceptance` |
+| Primary design concerns recognized in policy: restart correctness, slash-command authorization, dispatcher-boundary erosion (deterministic-state-machine boundary preservation under operational pressure) | §10.7 | `amendment-required: docs/implementation_context_governance.md`; `amendment-required: docs/runbooks/governor_gated_github_pr_agent_loop.md` |
+| SCAFFOLD-class autonomous-loop task packet drafted (under EW §2.2 task-packet discipline, ICG governance, and the approved runbook workflow); not authored by this retrospective | §10.9 | `artifact-required: SCAFFOLD-class autonomous-loop task packet` |
+| Open engineering questions deferred to the SCAFFOLD-class packet (12 items, including the Phase-0 deliverables and the §10.9 design risks: GitHub comment-size / evidence-storage boundary; `repository_dispatch` evaluation as a clock-time-overhead mitigation) | §10.9 | `informational` here; concrete items are scope inputs to the `artifact-required:` SCAFFOLD-class packet above |
+
+### 11.9 Cross-cutting and meta items
+
+| Item | Source | Tag(s) |
+|---|---|---|
+| GitHub-derived facts in §2.1 (merge timestamp, ruleset restore verification, repository visibility flip, pre-flip secret-scan audit outcome) are reproduced from the post-PR-#2 handoff and pending independent verification before v1.0 promotion | §2.1, §13 | `informational`; verification pass is a v0.1 → v1.0 precondition |
+| §7.1 Cursor operational-readiness claim is reproduced from the post-PR-#2 handoff and pending verification against the VPS or setup notes before v1.0 promotion | §7.1, §13 | `informational`; verification pass is a v0.1 → v1.0 precondition |
+| EW §13 re-read trigger applies before SCAFFOLD-002 work begins: operator re-reads EW, ICG, and runbook | §12 (precondition list) | `informational`; precondition |
+
+### 11.10 Index of `decision-required:` and `amendment-required:` items
+
+For Approver scanning convenience, the items requiring a decision or a document change are concentrated below. This index is derived from §11.1–§11.9 and adds no new items.
+
+**Decisions required (Approver):**
+
+1. Solo-operator branch-protection procedure — A / B / C (§5.3; recommendation: A).
+2. Terminal-label model — A / B / C / B+C (§6.4; recommendation: B+C, label `ai:loop-complete`).
+3. Cursor cleanup-pass status for SCAFFOLD-002 (§7.4; recommendation: skip by default, retry under three named conditions).
+4. Numbering convention reconciliation (§4.8; recommendation: canonical runbook §6 step numbers).
+5. Autonomous-loop architecture acceptance (§10.5; recommendation: accept with phasing).
+6. Phase-0 spike authorization (§10.6; recommendation: authorize as a separate deliverable scoped to headless-CLI verification).
+7. β.1 / β.2 phasing acceptance (§10.6; recommendation: phased, β.1 first, β.2 only after β.1 proves out).
+
+**Amendments required (named document; standard change process applies):**
+
+- `docs/runbooks/governor_gated_github_pr_agent_loop.md` — accumulated runbook amendments from §4.1, §4.2, §4.3, §4.4, §4.5, §4.6, §4.7, §4.8, §5.3, §6.4, §9, §10.5, §10.7. Drafted as a single amendment package or as a sequenced series; the amendment process determines the split.
+- `docs/implementation_context_governance.md` — accumulated ICG amendments from §4.1, §4.2, §4.3, §9, §10.5, §10.7. Same drafting-package consideration as the runbook.
+- `docs/runbooks/vps_development_environment.md` — only if option B is selected for §5.3 (second human maintainer convention).
+
+**Artifacts required (new):**
+
+- Phase-0 verification note at `docs/reviews/2026-05-05_phase0_autonomous_loop_headless_cli_verification.md` (or equivalent date-stamped path).
+- SCAFFOLD-class autonomous-loop task packet (drafted under EW §2.2 + ICG + runbook governance; not authored by this retrospective).
+- Optional companion at `docs/reviews/2026-05-05_autonomous_loop_proposal.md` if §10's recommended-direction material grows past the condensed scope of this retrospective.
+
+The retrospective stops here on amendments and artifacts. Drafting any of them is out of scope per §1.3.
+
+---
+
+## 12. Pre-SCAFFOLD-002 gates
+
+§12 lists the items that must close before the SCAFFOLD-002 task packet drafting begins. The list is the operational expression of the operator's gating direction in the post-PR-#2 handoff: SCAFFOLD-002 work is gated on this retrospective's completion or explicit Approver waiver. §12 makes that gating concrete.
+
+The Phase-0 spike (§10.6) is *not* among these gates. The autonomous-loop architecture is a separate implementation track per §10.6's phasing summary; SCAFFOLD-002 is independent of autonomous-loop existence.
+
+### 12.1 Hard gates — must close before SCAFFOLD-002 task packet drafting
+
+1. **This retrospective at v1.0.** v0.1 DRAFT promotes to v1.0 only after the §13 verification pass closes the GitHub-derived facts in §2.1 and the Cursor operational-readiness claim in §7.1. Either v1.0 promotion or an explicit Approver waiver of the gate satisfies this item.
+2. **Operator re-read of EW, ICG, and runbook.** EW §13 re-read trigger applies. SCAFFOLD-002 is a new module-type context (it is implementation under the loop, where SCAFFOLD-001 was the loop's first run); the re-read is required by EW §13 and is recorded here as a precondition rather than as a recommendation.
+3. **§11.10 decisions 1–4 (the four non-autonomous-loop decisions).** Specifically: solo-operator branch-protection procedure (§5.3 / §11.10 item 1); terminal-label model (§6.4 / §11.10 item 2); Cursor cleanup-pass status for SCAFFOLD-002 (§7.4 / §11.10 item 3); numbering convention reconciliation (§4.8 / §11.10 item 4). Each is a precondition for SCAFFOLD-002's task packet because the packet's structure depends on the answers (e.g., the packet must specify branch-protection procedure under the chosen option; the packet must specify whether Cursor is a stage; the packet must use the chosen numbering convention).
+
+§11.10 decisions 5–7 (autonomous-loop architecture acceptance; Phase-0 spike authorization; β.1 / β.2 phasing) are *not* hard gates on SCAFFOLD-002. They gate the autonomous-loop track only.
+
+### 12.2 Soft gates — recommended but not blocking
+
+1. **§11.1 / §11.2 highest-leverage runbook amendments adopted.** The pre-approved-commands cheat sheet (§3.3 / §11.1) and the §4.1 / §4.2 / §4.4 / §4.5 amendments materially reduce SCAFFOLD-002's relay cost. Their adoption before SCAFFOLD-002 is not strictly blocking, but the operator-effort cost of running SCAFFOLD-002 without them is the same cost §3 records as the dominant pain point. The retrospective recommends adopting them before SCAFFOLD-002 begins.
+2. **§9 session-boundary discipline documented.** The discipline is currently captured only in this retrospective and in the post-PR-#2 handoff. Before SCAFFOLD-002 begins, the discipline should be written into the runbook's operating notes at minimum, even if the policy-layer ICG amendment is deferred.
+3. **§5.3 standing rule documented.** The "any temporary branch-protection or ruleset relaxation must have a documented restore step and a verification record before the loop is considered closed" invariant is the smallest concrete deliverable the §5 decision can produce; it can be added to the runbook independently of the larger A/B/C decision and removes a known governance fragility.
+
+### 12.3 Out of scope for §12
+
+- **The SCAFFOLD-002 task packet itself.** Drafting the packet is a separate activity under EW §2.2 / runbook §16 once the §12.1 hard gates close. The retrospective does not draft it.
+- **The autonomous-loop track gates.** Recorded under §11.8 / §11.10 items 5–7. Independent of SCAFFOLD-002 per §10.6.
+- **Cleanup of branch `scaffold/scaffold-001-repo-skeleton`.** Recorded under §13 as a deferred decision, not as a SCAFFOLD-002 gate.
+
+---
+
+## 13. Deferred items, open questions, and v1.0 verification gates
+
+§13 collects items the retrospective records but does not act on. Three categories.
+
+### 13.1 Deferred operational items
+
+1. **Branch `scaffold/scaffold-001-repo-skeleton` deletion.** Retained on `origin` per the post-PR-#2 handoff, with deletion deferred to this retrospective. The retrospective recommends **deletion**, on the basis that the merge commit on `main` (`1aa31689a922dc074ecf49100a439210f528cb93`) and the latest PR commit SHA at the final gate (`f13e926ade498c1ae97182587365f297f2bbfa21`, preserved as the parent of the merge commit) together preserve all SCAFFOLD-001 history reachable from `main`. The branch's continued existence on `origin` adds discoverability noise without governance value. `decision-required: scaffold/scaffold-001-repo-skeleton deletion`. The decision is small and can be executed at v1.0 promotion time.
+2. **Whether the post-PR-#2 retrospective convention itself becomes a runbook step.** This retrospective exists because the operator handoff requested it after PR #2; the runbook §6 has no canonical retrospective step. Adopting the retrospective as a permanent runbook step would itself be a runbook amendment. The retrospective records this as an open governance question for the runbook's maintainers; it does not recommend adoption as a permanent step yet. One PR's evidence is insufficient to establish whether the retrospective convention should become standing practice or remain a one-off post-SCAFFOLD-001 artifact. `decision-required: retrospective as standing runbook convention` (deferred; revisit after SCAFFOLD-002 closes).
+
+### 13.2 Open questions for future amendments and packets
+
+The substantive open questions are concentrated in §10.9 (autonomous-loop) and in §11.10's `decision-required:` index. §13.2 collects open questions that did not fit either bucket and that the retrospective does not own.
+
+1. **Closed-without-merge label sub-question.** The terminal-label model (§6) needs a label naming for the closed-without-merge case (e.g., `ai:loop-complete-no-merge`, `ai:loop-abandoned`, or reuse of a `blocked:*` label as the terminal state for unresolved escalations). Belongs to the runbook amendment, not to the retrospective. `informational` here.
+2. **Long-term webhook adoption.** §10.5 / §10.8 records webhooks as the long-term evolution of the autonomous-loop coordination mechanism, requiring a separate approved task with its own deployment / security review. The retrospective does not list specific webhook design questions; they belong to the post-MVP autonomous-loop work, after β.1 has produced operating evidence. `informational`.
+3. **Whether `ops.provider_raw_payloads` and other governed Section 2 / Section 6 surfaces produce evidence categories that hit §10.9 #11's GitHub comment-size boundary during implementation.** Recorded as a potential design risk for any future autonomous-loop SCAFFOLD-class packet that touches Section 2 / Section 6 implementation; not a SCAFFOLD-001 / SCAFFOLD-002 concern. `informational`.
+
+### 13.3 v1.0 verification gates
+
+This retrospective is v0.1 DRAFT. The §1 non-authorization statement and the §2.1 / §7.1 verification notes flag specific facts that are reproduced from the post-PR-#2 handoff but are not all independently proven by the markdown files in this repository at v0.1 time. v1.0 promotion is conditional on the following verification pass.
+
+| Fact | Source | Verification mechanism |
+|---|---|---|
+| PR #2 merged-at timestamp `2026-05-04T05:39:07Z` | §2.1 | `gh pr view 2 --json mergedAt`; cross-reference against the merge commit on `main` |
+| PR #2 merge commit `1aa31689a922dc074ecf49100a439210f528cb93` | §2.1 | `gh pr view 2 --json mergeCommit --jq '.mergeCommit.oid'`; optionally confirm the merge commit is reachable from `main` with `git merge-base --is-ancestor 1aa31689a922dc074ecf49100a439210f528cb93 main` |
+| Latest PR commit SHA at final gate `f13e926ade498c1ae97182587365f297f2bbfa21` (preserved as parent of merge commit) | §2.1, §2.2 | `git log --first-parent main`; verify the named SHA is parent of the merge commit |
+| Ruleset `main protection` Active enforcement and configuration restored to pre-merge state | §2.1, §5.2 | `gh api repos/prodempsey/quant-research-platform/rulesets`; compare against the recorded baseline |
+| Repository visibility public, post-secret-scan-audit-clean | §2.1 | `gh api repos/prodempsey/quant-research-platform --jq .visibility`; cross-reference against the prior governance trail recording the secret-scan audit |
+| Issue #1 closed; reason `completed`; stale labels stripped | §2.1 | `gh issue view 1 --json state,stateReason,labels` |
+| PR #2 stale labels stripped; branch `scaffold/scaffold-001-repo-skeleton` retained on `origin` | §2.1 | `gh pr view 2 --json labels`; `git ls-remote origin scaffold/scaffold-001-repo-skeleton` |
+| Loop-trace comment IDs (`pull/2#issuecomment-4368233682`, `pull/2#issuecomment-4368499035`, `pull/2#issuecomment-4368632762`) exist and have the post-fix-drift-check / final approval brief / post-merge completion confirmation content | §2.1 | `gh api repos/prodempsey/quant-research-platform/issues/comments/<id> --jq .body`; review content for each |
+| Cursor CLI / Cursor Agent installed and authenticated on the VPS as `quantdev`, runs from `/srv/quant/dev/quant-research-platform`, no production-secret access | §7.1 | VPS-side check by the operator; cross-reference against `docs/runbooks/vps_development_environment.md` |
+
+The verification pass is performed by the operator. The retrospective does not perform it; the retrospective records the gates the pass must close. v1.0 promotion may include a brief verification-results note added to §13.3 itself or kept as a separate v0.1 → v1.0 changelog entry.
+
+A failed verification on any single row above does not invalidate the retrospective's substantive content; it only invalidates the specific factual claim that failed. The retrospective's recommendations and amendment / decision tags are independent of these verification gates and remain valid at v0.1.
+
+### 13.4 What is intentionally not in §13
+
+- **Items already actioned in §11.** §13 does not duplicate the recommendations register; it captures only items that did not fit §11's per-source tables and §11.10's flat index.
+- **The SCAFFOLD-002 task packet's own open questions.** Those are not retrospective material; they belong to the SCAFFOLD-002 packet drafting activity that this retrospective does not perform.
+- **Post-MVP autonomous-loop questions beyond §10.9.** The autonomous-loop SCAFFOLD-class packet's own open questions (when that packet is drafted) will introduce a fresh set; those are not retrospective material either.
+
+---
+
+## 14. Changelog
+
+- **v0.1 DRAFT (2026-05-05).** Initial retrospective draft. Authored as the post-PR-#2 / SCAFFOLD-001 retrospective per the operator handoff. Records observations and recommended forward directions only; does not authorize any amendment, task packet, or implementation work. Subject to the §13.3 verification pass before v1.0 promotion. Builder: Claude (chat-Governor session). QA Reviewer: Approver, in iterative section-by-section review. Approver: Jeremy Dempsey (review-in-progress at v0.1).
+
+The v1.0 entry is added when the §13.3 verification pass closes and the Approver promotes the document. Until then the retrospective remains v0.1 DRAFT.
+
+---
+
+**End of document.**
