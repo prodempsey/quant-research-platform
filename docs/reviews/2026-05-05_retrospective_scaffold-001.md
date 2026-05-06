@@ -1,7 +1,8 @@
 # SCAFFOLD-001 / PR #2 — Retrospective
 
 **Document type:** Retrospective
-**Status:** v0.1 DRAFT
+**Status:** v1.0 LOCKED / APPROVED
+**Approval:** Jeremy Dempsey, 2026-05-05
 **Date:** 2026-05-05
 **Owner:** Jeremy Dempsey
 **Canonical path:** `docs/reviews/2026-05-05_retrospective_scaffold-001.md`
@@ -777,7 +778,28 @@ This retrospective is v0.1 DRAFT. The §1 non-authorization statement and the §
 
 The verification pass is performed by the operator. The retrospective does not perform it; the retrospective records the gates the pass must close. v1.0 promotion may include a brief verification-results note added to §13.3 itself or kept as a separate v0.1 → v1.0 changelog entry.
 
-A failed verification on any single row above does not invalidate the retrospective's substantive content; it only invalidates the specific factual claim that failed. The retrospective's recommendations and amendment / decision tags are independent of these verification gates and remain valid at v0.1.
+A failed verification on any single row above does not invalidate the retrospective's substantive content; it only invalidates the specific factual claim that failed. The retrospective's recommendations and amendment / decision tags are independent of these verification gates and remain valid at v1.0.
+
+
+#### Verification results (2026-05-05)
+
+The verification pass was performed by the operator on 2026-05-05. All nine rows passed.
+
+**Pre-verification traceability note.** PR #3 and PR #4 each required a temporary `main protection` ruleset relaxation to merge the v0.1 DRAFT and the second-half / verification-row-fix follow-up respectively. The ruleset was restored after each merge. Current ruleset verification (ruleset ID `15870510`, performed 2026-05-05) confirms active enforcement on `refs/heads/main` with the four expected rules: `deletion`, `non_fast_forward`, `pull_request` (1 approval, dismiss stale on push, require last push approval, required review thread resolution, allowed merge methods `merge` / `squash` / `rebase`). The §5.3 standing rule is satisfied for both PRs: relaxation was bounded, restoration was performed, and the restored state is verified.
+
+| Row | Subject | Result | Note |
+|---|---|---|---|
+| 1 | PR #2 merged-at timestamp `2026-05-04T05:39:07Z` | **PASS** | Confirmed via `gh pr view 2 --json mergedAt`. |
+| 2 | PR #2 merge commit `1aa31689a922dc074ecf49100a439210f528cb93` | **PASS** | Confirmed via `gh pr view 2 --json mergeCommit` (canonical source); `git merge-base --is-ancestor` confirms the merge commit is reachable from current `main`. |
+| 3 | Latest PR commit SHA at final gate `f13e926ade498c1ae97182587365f297f2bbfa21` (preserved as parent of merge commit) | **PASS** | Confirmed via parent of PR #2's merge commit. |
+| 4 | Ruleset `main protection` Active enforcement and configuration restored to pre-merge state | **PASS** | Ruleset ID `15870510` active on `refs/heads/main` with the four expected rules (see pre-verification traceability note above). |
+| 5 | Repository visibility public, post-secret-scan-audit-clean | **PASS** | `gh api .../visibility` returns `public`. Pre-flip secret-scan audit recorded in prior governance trail. |
+| 6 | Issue #1 closed; reason `completed`; stale labels stripped | **PASS** | Confirmed via `gh issue view 1 --json state,stateReason,labels`. |
+| 7 | PR #2 stale labels stripped; branch `scaffold/scaffold-001-repo-skeleton` retained on `origin` | **PASS** | Confirmed via `gh pr view 2 --json labels` and `git ls-remote origin scaffold/scaffold-001-repo-skeleton`. |
+| 8 | Loop-trace comment IDs (`pull/2#issuecomment-4368233682`, `pull/2#issuecomment-4368499035`, `pull/2#issuecomment-4368632762`) exist and have the expected post-fix drift check / final approval brief / post-merge completion confirmation content | **PASS** | All three comments exist; content matches §2.1 description for each (post-fix drift check, final approval brief, post-merge completion confirmation). |
+| 9 | Cursor CLI / Cursor Agent installed and authenticated on the VPS as `quantdev`, runs from `/srv/quant/dev/quant-research-platform`, no production-secret access | **PASS** | User: `quantdev`. Working path: `/srv/quant/dev/quant-research-platform`. `cursor-agent` installed at `/srv/quant/dev/.local/bin/cursor-agent`, version `2026.05.01-eea359f`. `quantdev` cannot read `/srv/quant/prod/quant-research-platform/.env` (file inaccessible or non-existent). `/srv/quant/prod` permissions `root:root 0750`; production repo path not visible to `quantdev`. |
+
+All nine rows pass. The §13.3 verification gate is closed; the retrospective is promoted to v1.0 LOCKED / APPROVED. See §14 changelog for the v1.0 entry.
 
 ### 13.4 What is intentionally not in §13
 
@@ -789,9 +811,10 @@ A failed verification on any single row above does not invalidate the retrospect
 
 ## 14. Changelog
 
+- **v1.0 LOCKED / APPROVED (2026-05-05).** v0.1 DRAFT promoted to v1.0 LOCKED / APPROVED with **no substantive change** to observations, recommendations, amendment / decision tags, or scope. The §13.3 verification pass closed on 2026-05-05; all nine rows passed (results recorded inline in §13.3). The promotion edit consists only of: (a) front-matter status flipped from `v0.1 DRAFT` to `v1.0 LOCKED / APPROVED` with parallel Approval line added; (b) §13.3 verification-results subsection added beneath the existing nine-row gate table; (c) this changelog entry. No retrospective recommendation is reopened. No new scope is introduced. The pre-SCAFFOLD-002 hard gates per §12.1 #1 (retrospective at v1.0) and pre-verification traceability for the §5.3 standing rule (PRs #3 and #4 ruleset relaxation closed properly) are recorded by the v1.0 promotion. Approver: Jeremy Dempsey. Builder: Claude (chat-Governor session, drafted promotion edit). QA Reviewer: Approver (verification-pass operator and v1.0 review).
+
 - **v0.1 DRAFT (2026-05-05).** Initial retrospective draft. Authored as the post-PR-#2 / SCAFFOLD-001 retrospective per the operator handoff. Records observations and recommended forward directions only; does not authorize any amendment, task packet, or implementation work. Subject to the §13.3 verification pass before v1.0 promotion. Builder: Claude (chat-Governor session). QA Reviewer: Approver, in iterative section-by-section review. Approver: Jeremy Dempsey (review-in-progress at v0.1).
 
-The v1.0 entry is added when the §13.3 verification pass closes and the Approver promotes the document. Until then the retrospective remains v0.1 DRAFT.
 
 ---
 
